@@ -23,22 +23,19 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('phone', 'password', 'fullName', 'address', 'idType', 'idNumber', 'role', 'department')
+        fields = ('phone', 'password', 'fullName', 'address', 'idType', 'idNumber')
     
     # Custom fields for frontend compatibility
     fullName = serializers.CharField(source='first_name', required=False)
     idType = serializers.CharField(source='id_type', required=False)
     idNumber = serializers.CharField(source='id_number', required=False)
 
-    def validate_role(self, value):
-        if value not in ['CITIZEN', 'FIELD_OFFICIAL']:
-            raise serializers.ValidationError("Only Citizen and Field Official roles can be registered publicly.")
-        return value
-
     def create(self, validated_data):
         password = validated_data.pop('password')
         # Use phone as username
         validated_data['username'] = validated_data.get('phone')
+        # Force citizen role for public registration
+        validated_data['role'] = 'CITIZEN'
         user = User.objects.create(**validated_data)
         user.set_password(password)
         user.save()

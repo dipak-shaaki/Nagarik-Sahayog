@@ -20,28 +20,8 @@ const RegisterScreen = ({ navigation }) => {
         department: '',
     });
 
-    const [departments, setDepartments] = useState([]);
-    const [loadingDepts, setLoadingDepts] = useState(false);
-
     const { register, isLoading } = useAuth();
     const { t } = useLanguage();
-
-    useEffect(() => {
-        const fetchDepts = async () => {
-            setLoadingDepts(true);
-            try {
-                const url = Platform.OS === 'web' ? 'http://localhost:8000/api/departments/' : 'http://10.0.2.2:8000/api/departments/';
-                const res = await fetch(url);
-                const data = await res.json();
-                setDepartments(data);
-            } catch (e) {
-                console.log(e);
-            } finally {
-                setLoadingDepts(false);
-            }
-        };
-        fetchDepts();
-    }, []);
 
     const handleChange = (key, value) => {
         setFormData(prev => ({ ...prev, [key]: value }));
@@ -116,40 +96,6 @@ const RegisterScreen = ({ navigation }) => {
                         secureTextEntry
                     />
 
-                    <Text style={styles.label}>I am a:</Text>
-                    <View style={styles.roleContainer}>
-                        <TouchableOpacity
-                            style={[styles.roleItem, formData.role === 'CITIZEN' && styles.activeRoleItem]}
-                            onPress={() => handleChange('role', 'CITIZEN')}
-                        >
-                            <Ionicons name="person" size={20} color={formData.role === 'CITIZEN' ? COLORS.white : COLORS.primary} />
-                            <Text style={[styles.roleText, formData.role === 'CITIZEN' && styles.activeRoleText]}>Citizen</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.roleItem, formData.role === 'FIELD_OFFICIAL' && styles.activeRoleItem]}
-                            onPress={() => handleChange('role', 'FIELD_OFFICIAL')}
-                        >
-                            <Ionicons name="shield" size={20} color={formData.role === 'FIELD_OFFICIAL' ? COLORS.white : COLORS.primary} />
-                            <Text style={[styles.roleText, formData.role === 'FIELD_OFFICIAL' && styles.activeRoleText]}>Field Official</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {formData.role === 'FIELD_OFFICIAL' && (
-                        <>
-                            <Text style={styles.label}>Select Department:</Text>
-                            <View style={styles.deptContainer}>
-                                {departments.map((dept) => (
-                                    <TouchableOpacity
-                                        key={dept.id}
-                                        style={[styles.deptItem, formData.department === dept.id && styles.activeDeptItem]}
-                                        onPress={() => handleChange('department', dept.id)}
-                                    >
-                                        <Text style={[styles.deptText, formData.department === dept.id && styles.activeDeptText]}>{dept.name}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        </>
-                    )}
 
                     {error ? <Text style={styles.errorText}>{error}</Text> : null}
                     <CustomButton
@@ -207,58 +153,6 @@ const styles = StyleSheet.create({
         color: COLORS.text,
         marginTop: 15,
         marginBottom: 10,
-    },
-    roleContainer: {
-        flexDirection: 'row',
-        gap: 15,
-        marginBottom: 10,
-    },
-    roleItem: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: COLORS.primary,
-        gap: 8,
-    },
-    activeRoleItem: {
-        backgroundColor: COLORS.primary,
-    },
-    roleText: {
-        fontSize: 14,
-        color: COLORS.primary,
-        fontWeight: '600',
-    },
-    activeRoleText: {
-        color: COLORS.white,
-    },
-    deptContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 10,
-        marginBottom: 15,
-    },
-    deptItem: {
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#eee',
-    },
-    activeDeptItem: {
-        backgroundColor: COLORS.secondary,
-        borderColor: COLORS.secondary,
-    },
-    deptText: {
-        fontSize: 12,
-        color: COLORS.textLight,
-    },
-    activeDeptText: {
-        color: COLORS.white,
-        fontWeight: 'bold',
     },
     footer: {
         flexDirection: 'row',
