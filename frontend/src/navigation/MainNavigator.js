@@ -9,6 +9,7 @@ import MapScreen from '../screens/MapScreen';
 import ServiceDetailScreen from '../screens/ServiceDetailScreen';
 
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
+import ReportTrackingScreen from '../screens/ReportTrackingScreen';
 
 const Stack = createStackNavigator();
 
@@ -25,6 +26,7 @@ const MainNavigator = () => {
             <Stack.Screen name="ServiceDetail" component={ServiceDetailScreen} />
             <Stack.Screen name="EmergencyTracking" component={EmergencyTrackingScreen} />
             <Stack.Screen name="MapScreen" component={MapScreen} />
+            <Stack.Screen name="ReportTracking" component={ReportTrackingScreen} />
         </Stack.Navigator>
     );
 };

@@ -65,15 +65,6 @@ const LoginScreen = ({ navigation }) => {
                             <Text style={styles.link}>{t('register')}</Text>
                         </TouchableOpacity>
                     </View>
-
-                    {/* Demo Hints */}
-                    <View style={styles.demoHints}>
-                        <Text style={styles.hintTitle}>Demo Login Hints:</Text>
-                        <Text style={styles.hintText}>• 9800000000: Super Admin</Text>
-                        <Text style={styles.hintText}>• 91XXXXXXXX: Dept Admin</Text>
-                        <Text style={styles.hintText}>• 92XXXXXXXX: Field Official</Text>
-                        <Text style={styles.hintText}>• Others: Citizen</Text>
-                    </View>
                 </View>
             </ScrollView>
         </ScreenWrapper>
