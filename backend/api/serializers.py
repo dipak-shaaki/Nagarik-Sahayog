@@ -69,7 +69,7 @@ class ReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report
         fields = '__all__'
-        read_only_fields = ('citizen', 'status', 'assigned_official')
+        read_only_fields = ('citizen', 'status', 'assigned_official', 'priority_score', 'priority_level', 'ai_reasoning')
 
 class FieldOfficialLocationSerializer(serializers.ModelSerializer):
     official_name = serializers.ReadOnlyField(source='official.first_name')

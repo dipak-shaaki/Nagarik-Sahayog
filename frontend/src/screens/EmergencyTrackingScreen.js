@@ -2,7 +2,10 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Dimensions, Image, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
+
+// Conditional import for native-only maps
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, AnimatedRegion } from 'react-native-maps';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ScreenWrapper from '../components/ScreenWrapper';
 import { COLORS, SHADOWS } from '../constants/theme';
@@ -22,12 +25,14 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
     const [unitDetails, setUnitDetails] = useState(null);
     const [unitLocation, setUnitLocation] = useState(null);
     const [userLocation, setUserLocation] = useState(null);
+    const [routePath, setRoutePath] = useState(null);
 
     const mapRef = useRef(null);
     const locationSubscription = useRef(null);
     const simulationInterval = useRef(null);
     const hasUnitLocation = useRef(false);
 
+    // Animated region for smooth movement (only on native)
     // Animated region for smooth movement
     const unitAnimatedRegion = useRef(new AnimatedRegion({
         latitude: 27.7172,
@@ -159,6 +164,7 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
                 // Update state for Polyline/Distance
                 setUnitLocation(newLoc);
 
+                // Smooth Animation (only if AnimatedRegion is available)
                 // Smooth Animation
                 if (hasUnitLocation.current) {
                     unitAnimatedRegion.timing({
@@ -176,17 +182,58 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
                     setUnitBearing(data.bearing);
                 }
 
+                // Update route path if available
+                if (data.route_path && data.route_path.length > 0) {
+                    const formattedRoute = data.route_path.map(point => ({
+                        latitude: point[0],
+                        longitude: point[1]
+                    }));
+                    setRoutePath(formattedRoute);
+                }
+
                 if (data.status !== status) {
                     setStatus(data.status);
+
+                    // Auto-complete when arrived
+                    if (data.status === 'ARRIVED') {
+                        setTimeout(() => {
+                            Alert.alert(
+                                'Service Arrived',
+                                'The emergency service has arrived at your location. Marking as completed.',
+                                [
+                                    {
+                                        text: 'OK',
+                                        onPress: () => {
+                                            // Mark as completed
+                                            completeEmergency();
+                                        }
+                                    }
+                                ]
+                            );
+                        }, 3500); // Wait for the 3000ms animation to complete
+                    }
+
                     fetchEmergencyDetails();
                 }
                 if (userLocation) {
                     calculateDistanceAndETA(newLoc, userLocation);
+                    // Auto-fit map to show both locations
+                    fitMapToLocations(userLocation, newLoc);
                 }
             }
         } catch (error) {
             console.error('Simulate error:', error);
             Alert.alert('Simulation Error', error.message);
+        }
+    };
+
+    const fitMapToLocations = (userLoc, unitLoc) => {
+        if (mapRef.current && userLoc && unitLoc) {
+            const coordinates = [userLoc, unitLoc];
+            mapRef.current.fitToCoordinates(coordinates, {
+                edgePadding: { top: 150, right: 50, bottom: 350, left: 50 },
+                animated: true,
+            });
         }
     };
 
@@ -220,7 +267,41 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
             }
 
             setUnitLocation(loc);
-            if (userLocation) calculateDistanceAndETA(loc, userLocation);
+            if (userLocation) {
+                calculateDistanceAndETA(loc, userLocation);
+                fitMapToLocations(userLocation, loc);
+            }
+        }
+    };
+
+    const completeEmergency = async () => {
+        try {
+            const token = await AsyncStorage.getItem('userToken');
+            const response = await fetch(`${API_URL}/emergency/requests/${emergencyRequestId}/`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ status: 'COMPLETED' })
+            });
+
+            if (response.ok) {
+                setStatus('COMPLETED');
+                setStatusMessage('Service completed');
+                Alert.alert(
+                    'Completed',
+                    'Emergency service has been marked as completed. Thank you!',
+                    [
+                        {
+                            text: 'OK',
+                            onPress: () => navigation.goBack()
+                        }
+                    ]
+                );
+            }
+        } catch (error) {
+            console.error('Complete error:', error);
         }
     };
 
@@ -271,20 +352,24 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
                     <Text style={styles.title}>{serviceName} Tracking</Text>
                 </View>
 
+
                 <MapView
                     ref={mapRef}
                     style={styles.map}
-                    provider={PROVIDER_GOOGLE}
                     initialRegion={{
                         latitude: userLocation?.latitude || 27.7172,
                         longitude: userLocation?.longitude || 85.3240,
                         latitudeDelta: 0.05,
                         longitudeDelta: 0.05,
                     }}
+                    showsMyLocationButton={false}
+                    showsUserLocation={false}
+                    showsCompass={false}
                 >
                     {userLocation && (
-                        <Marker coordinate={userLocation} title="You">
-                            <View style={styles.userMarker}>
+                        <Marker coordinate={userLocation} title="You" zIndex={1}>
+                            <View style={styles.userMarkerContainer}>
+                                <View style={styles.userMarkerPulse} />
                                 <View style={styles.userMarkerDot} />
                             </View>
                         </Marker>
@@ -296,26 +381,42 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
                             title="Emergency Unit"
                             anchor={{ x: 0.5, y: 0.5 }}
                             style={{ transform: [{ rotate: `${unitBearing}deg` }] }}
+                            zIndex={2}
                         >
                             <View style={styles.unitMarker}>
-                                <MaterialIcons
-                                    name={serviceName === 'Police' ? 'local-police' : serviceName === 'Fire' ? 'fire-truck' : 'medical-services'}
-                                    size={24}
-                                    color={COLORS.white}
-                                />
+                                <View style={styles.unitMarkerInner}>
+                                    <MaterialIcons
+                                        name={serviceName === 'Police' ? 'local-police' : serviceName === 'Fire' ? 'fire-truck' : 'medical-services'}
+                                        size={22}
+                                        color={COLORS.white}
+                                    />
+                                </View>
+                                <View style={styles.unitMarkerArrow} />
                             </View>
                         </Marker.Animated>
                     )}
 
-                    {userLocation && unitLocation && (
+                    {routePath && routePath.length > 0 && (
                         <Polyline
-                            coordinates={[unitLocation, userLocation]}
+                            coordinates={routePath}
                             strokeColor={COLORS.primary}
-                            strokeWidth={3}
-                            lineDashPattern={[5, 5]}
+                            strokeWidth={5}
+                            lineCap="round"
+                            lineJoin="round"
                         />
                     )}
                 </MapView>
+
+                {/* Floating Map Controls */}
+                <View style={styles.mapControls}>
+                    <TouchableOpacity
+                        style={styles.mapControlButton}
+                        onPress={() => fitMapToLocations(userLocation, unitLocation)}
+                    >
+                        <Ionicons name="scan-outline" size={24} color={COLORS.primary} />
+                    </TouchableOpacity>
+                </View>
+
 
                 <View style={[styles.statusCard, SHADOWS.large]}>
                     <View style={styles.statusHeader}>
@@ -399,31 +500,70 @@ const styles = StyleSheet.create({
         borderRadius: 8,
     },
     map: { width: '100%', height: '100%' },
-    userMarker: {
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        backgroundColor: 'rgba(33, 150, 243, 0.2)',
+    userMarkerContainer: {
+        width: 40,
+        height: 40,
         justifyContent: 'center',
         alignItems: 'center',
     },
+    userMarkerPulse: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: 'rgba(33, 150, 243, 0.3)',
+        position: 'absolute',
+    },
     userMarkerDot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
+        width: 12,
+        height: 12,
+        borderRadius: 6,
         backgroundColor: '#2196F3',
         borderWidth: 2,
         borderColor: 'white',
+        ...SHADOWS.small,
     },
     unitMarker: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    unitMarkerInner: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         backgroundColor: COLORS.primary,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 2,
+        borderWidth: 3,
         borderColor: 'white',
+        ...SHADOWS.medium,
+    },
+    unitMarkerArrow: {
+        width: 0,
+        height: 0,
+        backgroundColor: 'transparent',
+        borderStyle: 'solid',
+        borderLeftWidth: 8,
+        borderRightWidth: 8,
+        borderBottomWidth: 12,
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderBottomColor: 'white',
+        transform: [{ rotate: '180deg' }],
+        marginTop: -5,
+    },
+    mapControls: {
+        position: 'absolute',
+        right: 20,
+        bottom: 380,
+        gap: 15,
+    },
+    mapControlButton: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: COLORS.surface,
+        justifyContent: 'center',
+        alignItems: 'center',
         ...SHADOWS.medium,
     },
     statusCard: {
@@ -490,6 +630,26 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     cancelButtonText: { color: COLORS.danger, fontSize: 16, fontWeight: '600' },
+    webFallback: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 40,
+        backgroundColor: COLORS.background,
+    },
+    webFallbackText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: COLORS.text,
+        textAlign: 'center',
+        marginTop: 20,
+    },
+    webFallbackSubtext: {
+        fontSize: 14,
+        color: COLORS.textLight,
+        textAlign: 'center',
+        marginTop: 10,
+    },
 });
 
 export default EmergencyTrackingScreen;

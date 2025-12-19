@@ -11,6 +11,7 @@ from .serializers import (
     FieldOfficialLocationSerializer
 )
 import math
+import random
 
 User = get_user_model()
 
@@ -54,20 +55,44 @@ class ReportViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
+        queryset = None
+        
         if user.role == 'SUPER_ADMIN':
-            return Report.objects.all()
+            queryset = Report.objects.all()
         elif user.role == 'DEPT_ADMIN':
             # See reports in their department
-            return Report.objects.filter(category=user.department)
+            queryset = Report.objects.filter(category=user.department)
         elif user.role == 'FIELD_OFFICIAL':
             # See tasks assigned to them
-            return Report.objects.filter(assigned_official=user)
+            queryset = Report.objects.filter(assigned_official=user)
         else:
             # Citizens see their own reports
-            return Report.objects.filter(citizen=user)
+            queryset = Report.objects.filter(citizen=user)
+        
+        # Sort by priority for admins and officials
+        if user.role in ['SUPER_ADMIN', 'DEPT_ADMIN', 'FIELD_OFFICIAL']:
+            queryset = queryset.order_by('-priority_score', '-created_at')
+        
+        return queryset
 
     def perform_create(self, serializer):
-        serializer.save(citizen=self.request.user)
+        # Save the report first
+        report = serializer.save(citizen=self.request.user)
+        
+        # Calculate AI-based priority
+        try:
+            from api.ai_priority import calculate_priority_with_ai
+            score, level, reasoning = calculate_priority_with_ai(report)
+            
+            report.priority_score = score
+            report.priority_level = level
+            report.ai_reasoning = reasoning
+            report.save()
+            
+            print(f"Report #{report.id} prioritized: {score} ({level})")
+        except Exception as e:
+            print(f"Priority calculation failed for report #{report.id}: {e}")
+            # Report is still saved, just without priority
 
 class AssignReportView(APIView):
     permission_classes = (IsSuperAdmin | IsDeptAdmin,)
@@ -183,7 +208,7 @@ class EmergencyRequestViewSet(viewsets.ModelViewSet):
         # Map service_type to department name (simplified)
         dept_name_map = {
             'AMBULANCE': 'Health',
-            'FIRE': 'Fire Department',
+            'FIRE': 'Fire',
             'POLICE': 'Police'
         }
         target_dept_name = dept_name_map.get(service_type)
@@ -277,22 +302,48 @@ class SimulateMovementView(APIView):
             
             official_loc, _ = FieldOfficialLocation.objects.get_or_create(official=emergency.assigned_official)
             
-            # Teleport if too far (> ~10km) to ensure simulation is visible
+            # Teleport for demo visibility if too far (squared distance check)
             dist_sq = (emergency.latitude - official_loc.latitude)**2 + (emergency.longitude - official_loc.longitude)**2
-            if dist_sq > 0.01:
-                official_loc.latitude = emergency.latitude - 0.005
-                official_loc.longitude = emergency.longitude - 0.005
-
-            # Move 10% closer to the destination
-            step = 0.1
-            official_loc.latitude += (emergency.latitude - official_loc.latitude) * step
-            official_loc.longitude += (emergency.longitude - official_loc.longitude) * step
             
-            # If very close, mark as arrived
+            # Initialize or reset route if invalid or finished
+            if not emergency.route_path or emergency.current_route_step >= len(emergency.route_path) - 1:
+                # Generate a simple 20-step linear path from Official -> Citizen
+                # This guarantees movement without relying on external APIs
+                emergency.route_path = []
+                steps = 20
+                for i in range(steps + 1):
+                    t = i / steps
+                    lat = official_loc.latitude + (emergency.latitude - official_loc.latitude) * t
+                    lon = official_loc.longitude + (emergency.longitude - official_loc.longitude) * t
+                    emergency.route_path.append([lat, lon])
+                emergency.current_route_step = 0
+                emergency.save()
+                print("DEBUG: Generated new linear simulation path")
+
+            # Move along the route
+            if emergency.route_path and len(emergency.route_path) > 0:
+                # Advance 1 step per call
+                emergency.current_route_step = min(
+                    emergency.current_route_step + 1,
+                    len(emergency.route_path) - 1
+                )
+                
+                # Update official location
+                current_point = emergency.route_path[emergency.current_route_step]
+                official_loc.latitude = current_point[0]
+                official_loc.longitude = current_point[1]
+                
+                print(f"DEBUG: Simulation Step {emergency.current_route_step}/{len(emergency.route_path)}")
+                emergency.save()
+            
+            # Check for arrival
             dist = math.sqrt((emergency.latitude - official_loc.latitude)**2 + (emergency.longitude - official_loc.longitude)**2)
-            if dist < 0.0001:
+            if dist < 0.00015: # Approx 15-20 meters
                 emergency.status = 'ARRIVED'
                 emergency.save()
+                # Free up the official for new requests
+                official_loc.is_available = True
+                print(f"DEBUG: Official {emergency.assigned_official.id} marked as available (arrived)")
             elif emergency.status == 'DISPATCHED':
                 emergency.status = 'EN_ROUTE'
                 emergency.save()
@@ -309,7 +360,8 @@ class SimulateMovementView(APIView):
                 'latitude': official_loc.latitude,
                 'longitude': official_loc.longitude,
                 'status': emergency.status,
-                'bearing': bearing
+                'bearing': bearing,
+                'route_path': emergency.route_path  # Send full route to frontend
             })
         except EmergencyRequest.DoesNotExist:
             return Response({'error': 'Not found'}, status=404)

@@ -11,7 +11,7 @@ import { CATEGORIES } from '../constants/categories';
 import { COLORS } from '../constants/theme';
 import { useLanguage } from '../context/LanguageContext';
 
-const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
+const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.10.254.243:8000/api';
 
 const ReportScreen = ({ navigation, route }) => {
     const { t } = useLanguage();

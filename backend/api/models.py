@@ -53,6 +53,11 @@ class Report(models.Model):
     assigned_official = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_tasks')
     rejection_reason = models.TextField(null=True, blank=True)
     
+    # AI-based Priority System
+    priority_score = models.IntegerField(default=0)  # 0-100 score from Gemini AI
+    priority_level = models.CharField(max_length=20, default='MEDIUM')  # CRITICAL/HIGH/MEDIUM/LOW
+    ai_reasoning = models.TextField(blank=True)  # Store AI's reasoning for transparency
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -83,6 +88,10 @@ class EmergencyRequest(models.Model):
     address = models.CharField(max_length=255, blank=True)
     
     assigned_official = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_emergencies')
+    
+    # Route tracking for realistic simulation
+    route_path = models.JSONField(null=True, blank=True)  # Stores the full route coordinates
+    current_route_step = models.IntegerField(default=0)  # Current position in the route
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
