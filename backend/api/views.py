@@ -110,37 +110,52 @@ class ReportViewSet(viewsets.ModelViewSet):
             return Report.objects.filter(citizen=user)
 
     def destroy(self, request, *args, **kwargs):
-        pk = kwargs.get('pk')
-        print(f"Delete request for Report {pk} from user {request.user} ({request.user.role})")
+        instance = self.get_object()
+        user = request.user
         
-        try:
-            # 1. Find the report
-            report = Report.objects.get(pk=pk)
+        # Super Admins and Field Officials are NOT allowed to delete reports directly
+        if user.role not in ['CITIZEN', 'DEPT_ADMIN']:
+            return Response({'error': f'Users with role {user.role} are not allowed to delete reports.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Security check: Dept Admin can only delete from their department
+        if user.role == 'DEPT_ADMIN':
+            if not user.department or instance.category_id != user.department_id:
+                return Response({'error': 'You can only delete reports from your own department.'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Security check: Citizens can only delete their own PENDING, RESOLVED, or DECLINED reports
+        if user.role == 'CITIZEN':
+            if instance.citizen_id != user.id:
+                return Response({'error': 'You can only delete your own reports.'}, status=status.HTTP_403_FORBIDDEN)
+            if instance.status not in ['PENDING', 'RESOLVED', 'DECLINED']:
+                return Response({'error': f'Cannot delete report with status: {instance.status}. Only Pending, Resolved, or Declined reports can be deleted.'}, status=status.HTTP_400_BAD_REQUEST)
             
-            # 2. Permission Check
-            if request.user.role in ['SUPER_ADMIN', 'DEPT_ADMIN']:
-                # Admins can delete anything
-                pass
-            elif request.user.role == 'CITIZEN':
-                # Citizens can only delete their own reports
-                if report.citizen_id != request.user.id:
-                    return Response({'error': 'You can only delete your own reports.'}, status=status.HTTP_403_FORBIDDEN)
-                # Citizens can only delete in certain statuses
-                if report.status not in ['PENDING', 'RESOLVED', 'DECLINED']:
-                    return Response({'error': 'You can only delete reports that are pending, resolved, or declined.'}, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                # Officials or others cannot delete
-                return Response({'error': 'You do not have permission to delete reports.'}, status=status.HTTP_403_FORBIDDEN)
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        user = self.request.user
+        
+        # Super Admins and Field Officials are NOT allowed to edit reports directly
+        if user.role not in ['CITIZEN', 'DEPT_ADMIN']:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(f"Users with role {user.role} are not allowed to edit reports.")
+            
+        if user.role == 'CITIZEN':
+            if instance.citizen_id != user.id:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("You can only edit your own reports.")
+            if instance.status != 'PENDING':
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("You can only edit pending reports.")
                 
-            # 3. Perform Deletion
-            report.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
+        # Dept Admin check is implicitly handled by get_queryset but we can be explicit
+        if user.role == 'DEPT_ADMIN':
+            if not user.department or instance.category_id != user.department_id:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("You can only edit reports within your department.")
             
-        except Report.DoesNotExist:
-            return Response({'error': 'Report not found'}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            print(f"Delete failed: {e}")
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save()
 
     @action(detail=True, methods=['post'])
     def like(self, request, pk=None):
@@ -159,15 +174,8 @@ class ReportViewSet(viewsets.ModelViewSet):
 
 
     def get_permissions(self):
-        """
-        Instantiates and returns the list of permissions that this view requires.
-        """
-        if self.action == 'destroy':
-            # Allow authenticated users (Citizens will be filtered in destroy method)
+        if self.action in ['update', 'partial_update', 'destroy']:
             permission_classes = [permissions.IsAuthenticated]
-        elif self.action in ['update', 'partial_update']:
-            # For general updates, restrict too (though specific endpoints handle status)
-            permission_classes = [IsSuperAdmin | IsDeptAdmin | IsOfficial]
         else:
             permission_classes = [permissions.IsAuthenticated]
         return [permission() for permission in permission_classes]
@@ -184,7 +192,7 @@ class ReportViewSet(viewsets.ModelViewSet):
         )
 
 class AssignReportView(APIView):
-    permission_classes = (IsSuperAdmin | IsDeptAdmin,)
+    permission_classes = (IsDeptAdmin,)
 
     def post(self, request, pk):
         try:
@@ -244,7 +252,7 @@ class UserListView(generics.ListAPIView):
         return User.objects.all().order_by('-date_joined')
 
 class UpdateReportStatusView(APIView):
-    permission_classes = (IsOfficial | IsDeptAdmin | IsSuperAdmin,)
+    permission_classes = (IsOfficial | IsDeptAdmin,)
 
     def patch(self, request, pk):
         try:
@@ -331,22 +339,43 @@ class DeclineReportView(APIView):
             if not reason:
                 return Response({'error': 'Rejection reason is required'}, status=status.HTTP_400_BAD_REQUEST)
             
-            report.status = 'DECLINED'
+            # Store the official's name before clearing
+            official_name = f"{request.user.first_name} {request.user.last_name}" if request.user.first_name else request.user.phone
+            
+            # Reset report to PENDING status so it can be reassigned
+            report.status = 'PENDING'
             report.rejection_reason = reason
+            # Clear the assignment so dept admin can assign to someone else
+            report.assigned_official = None
             report.save()
 
-            # Notify citizen
+            # Notify citizen about the rejection
             Notification.objects.create(
                 recipient=report.citizen,
-                title="Report Declined",
-                message=f"Your report '{report.title}' was declined. Reason: {reason}",
+                title="Report Rejected by Field Official",
+                message=f"Your report '{report.title}' was rejected by the assigned official. Reason: {reason}. It will be reassigned to another official.",
                 report=report
             )
 
-            # Notify Department Admin (optional but good practice)
-            # Find department admin... (skipping for simplicity unless user asks)
+            # Notify Department Admin with rejection reason
+            dept_admins = User.objects.filter(
+                role='DEPT_ADMIN',
+                department=report.category
+            )
+            
+            for admin in dept_admins:
+                Notification.objects.create(
+                    recipient=admin,
+                    title="Field Official Rejected Assignment",
+                    message=f"Field Official {official_name} rejected the report '{report.title}'. Reason: {reason}. Please reassign to another official.",
+                    report=report
+                )
 
-            return Response({'status': 'declined', 'new_status': 'DECLINED'}, status=status.HTTP_200_OK)
+            return Response({
+                'status': 'rejected', 
+                'new_status': 'PENDING',
+                'message': 'Report has been returned to pending status for reassignment'
+            }, status=status.HTTP_200_OK)
         except Report.DoesNotExist:
             return Response({'error': 'Report not found or not assigned to you'}, status=status.HTTP_404_NOT_FOUND)
 

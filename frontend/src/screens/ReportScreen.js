@@ -15,13 +15,17 @@ const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10
 
 const ReportScreen = ({ navigation, route }) => {
     const { t } = useLanguage();
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [location, setLocation] = useState(null);
-    const [locationAddress, setLocationAddress] = useState('');
+    const isEditMode = !!route.params?.report;
+    const reportData = route.params?.report;
+    const prefillData = route.params?.prefill;
+
+    const [title, setTitle] = useState(reportData?.title || prefillData?.title || '');
+    const [description, setDescription] = useState(reportData?.description || prefillData?.description || '');
+    const [location, setLocation] = useState(reportData ? { latitude: reportData.latitude, longitude: reportData.longitude } : null);
+    const [locationAddress, setLocationAddress] = useState(reportData?.location_address || '');
     const [isFetchingLocation, setIsFetchingLocation] = useState(false);
-    const [image, setImage] = useState(null);
-    const [selectedCategory, setSelectedCategory] = useState(null);
+    const [image, setImage] = useState(reportData?.image || null);
+    const [selectedCategory, setSelectedCategory] = useState(reportData?.category || prefillData?.category || null);
     const [departments, setDepartments] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -55,7 +59,6 @@ const ReportScreen = ({ navigation, route }) => {
             const result = await Location.reverseGeocodeAsync(coords);
             if (result.length > 0) {
                 const addr = result[0];
-                // Build address from available components
                 const parts = [
                     addr.name,
                     addr.street,
@@ -97,7 +100,6 @@ const ReportScreen = ({ navigation, route }) => {
     };
 
     const pickImage = async () => {
-        // No permissions request is necessary for launching the image library
         let result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             allowsEditing: true,
@@ -145,16 +147,24 @@ const ReportScreen = ({ navigation, route }) => {
             Alert.alert('Error', 'Please provide a title');
             return;
         }
+        if (!title) {
+            if (Platform.OS === 'web') alert('Please provide a title');
+            else Alert.alert('Error', 'Please provide a title');
+            return;
+        }
         if (!location) {
-            Alert.alert('Error', 'Please select a location');
+            if (Platform.OS === 'web') alert('Please select a location');
+            else Alert.alert('Error', 'Please select a location');
             return;
         }
         if (!selectedCategory) {
-            Alert.alert('Error', 'Please select a category');
+            if (Platform.OS === 'web') alert('Please select a category');
+            else Alert.alert('Error', 'Please select a category');
             return;
         }
         if (!description) {
-            Alert.alert('Error', 'Please provide a description');
+            if (Platform.OS === 'web') alert('Please provide a description');
+            else Alert.alert('Error', 'Please provide a description');
             return;
         }
 
@@ -169,7 +179,7 @@ const ReportScreen = ({ navigation, route }) => {
             data.append('longitude', location.longitude.toString());
             data.append('location_address', locationAddress);
 
-            if (image) {
+            if (image && !image.startsWith('http')) {
                 if (Platform.OS === 'web') {
                     const response = await fetch(image);
                     const blob = await response.blob();
@@ -182,27 +192,43 @@ const ReportScreen = ({ navigation, route }) => {
                 }
             }
 
-            const response = await fetch(`${API_URL}/reports/`, {
-                method: 'POST',
+            const url = isEditMode
+                ? `${API_URL}/reports/${reportData.id}/`
+                : `${API_URL}/reports/`;
+
+            const method = isEditMode ? 'PATCH' : 'POST';
+
+            const response = await fetch(url, {
+                method: method,
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',
-                    // Browser/Expo usually handles multipart boundaries correctly if we don't set Content-Type manually
                 },
                 body: data
             });
 
             if (response.ok) {
-                Alert.alert('Success', 'Report submitted successfully!', [
-                    { text: 'OK', onPress: () => navigation.goBack() }
-                ]);
+                const successMsg = `Report ${isEditMode ? 'updated' : 'submitted'} successfully!`;
+                if (Platform.OS === 'web') {
+                    alert(successMsg);
+                    navigation.goBack();
+                } else {
+                    Alert.alert('Success', successMsg, [
+                        { text: 'OK', onPress: () => navigation.goBack() }
+                    ]);
+                }
             } else {
-                const errData = await response.json();
+                const errData = await response.json().catch(() => ({}));
                 console.log('Submission error:', errData);
-                const errorMsg = typeof errData === 'object'
+                const errorMsg = errData.error || (typeof errData === 'object'
                     ? Object.entries(errData).map(([key, val]) => `${key}: ${val}`).join('\n')
-                    : 'Failed to submit report. Please check your data.';
-                Alert.alert('Submission Error', errorMsg);
+                    : 'Failed to submit report. Please check your data.');
+
+                if (Platform.OS === 'web') {
+                    alert(errorMsg);
+                } else {
+                    Alert.alert('Submission Error', errorMsg);
+                }
             }
         } catch (error) {
             console.error('Submission catch:', error);
@@ -227,7 +253,7 @@ const ReportScreen = ({ navigation, route }) => {
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
                         <Ionicons name="close" size={24} color={COLORS.text} />
                     </TouchableOpacity>
-                    <Text style={styles.title}>{t('reportIssue')}</Text>
+                    <Text style={styles.title}>{isEditMode ? 'Edit Report' : (t('reportIssue') || 'Report Issue')}</Text>
                 </View>
 
                 <View style={styles.form}>
@@ -292,9 +318,8 @@ const ReportScreen = ({ navigation, route }) => {
                         <Text style={styles.sectionTitle}>{t('category') || 'Category'}</Text>
                         <View style={styles.categoryGrid}>
                             {departments.map((dept) => {
-                                // Try to find a matching icon/color from our constants
                                 const fallback = CATEGORIES.find(c => c.name.toLowerCase() === dept.name.toLowerCase()) ||
-                                    CATEGORIES[CATEGORIES.length - 1]; // "Other"
+                                    CATEGORIES[CATEGORIES.length - 1];
 
                                 return (
                                     <TouchableOpacity
@@ -351,8 +376,9 @@ const ReportScreen = ({ navigation, route }) => {
                         />
                     </View>
 
+                    {/* Adding a dynamic button title */}
                     <CustomButton
-                        title={t('submitReport')}
+                        title={isEditMode ? 'Update Report' : (t('submitReport') || 'Submit Report')}
                         onPress={handleSubmit}
                         isLoading={isSubmitting}
                     />

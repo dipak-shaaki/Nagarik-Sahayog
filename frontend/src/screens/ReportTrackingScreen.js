@@ -1,16 +1,18 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Dimensions, Animated, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Dimensions, Animated, Linking, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import MapRenderer from '../components/MapRenderer';
 import ScreenWrapper from '../components/ScreenWrapper';
 import { COLORS, SHADOWS } from '../constants/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
 
 const ReportTrackingScreen = ({ navigation, route }) => {
+    const { user } = useAuth();
     const { reportId } = route.params;
     const [report, setReport] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -109,6 +111,57 @@ const ReportTrackingScreen = ({ navigation, route }) => {
     const callOfficial = () => {
         if (report?.official_phone) {
             Linking.openURL(`tel:${report.official_phone}`);
+        }
+    };
+
+    const handleDelete = async () => {
+        const deleteConfirmed = async () => {
+            try {
+                const token = await AsyncStorage.getItem('userToken');
+                const response = await fetch(`${API_URL}/reports/${report.id}/`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    if (Platform.OS === 'web') {
+                        alert("Report deleted successfully.");
+                        navigation.goBack();
+                    } else {
+                        Alert.alert("Success", "Report deleted successfully.", [
+                            { text: "OK", onPress: () => navigation.goBack() }
+                        ]);
+                    }
+                } else {
+                    const data = await response.json().catch(() => ({}));
+                    const errorMsg = data.error || "Failed to delete report.";
+                    if (Platform.OS === 'web') {
+                        alert(errorMsg);
+                    } else {
+                        Alert.alert("Error", errorMsg);
+                    }
+                }
+            } catch (error) {
+                if (Platform.OS === 'web') {
+                    alert("Connection error.");
+                } else {
+                    Alert.alert("Error", "Connection error.");
+                }
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm("Are you sure you want to delete this report?")) {
+                deleteConfirmed();
+            }
+        } else {
+            Alert.alert(
+                "Delete Report",
+                "Are you sure you want to delete this report?",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Delete", style: "destructive", onPress: deleteConfirmed }
+                ]
+            );
         }
     };
 
@@ -256,11 +309,34 @@ const ReportTrackingScreen = ({ navigation, route }) => {
                     )}
 
                     {/* Report Details Brief */}
-                    <View style={[styles.card, SHADOWS.small, { marginBottom: 100 }]}>
+                    <View style={[styles.card, SHADOWS.small]}>
                         <Text style={styles.sectionTitle}>Issue Details</Text>
                         <Text style={styles.detailText}><Text style={{ fontWeight: 'bold' }}>Title:</Text> {report?.title}</Text>
                         <Text style={styles.detailText}><Text style={{ fontWeight: 'bold' }}>Location:</Text> {report?.location_address}</Text>
+
+                        <View style={styles.actionRow}>
+                            {report?.status === 'PENDING' && (user?.role === 'CITIZEN' || user?.role === 'DEPT_ADMIN') && (
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, styles.editBtn]}
+                                    onPress={() => navigation.navigate('CreateReport', { report })}
+                                >
+                                    <Ionicons name="create-outline" size={20} color={COLORS.white} />
+                                    <Text style={styles.actionBtnText}>Edit</Text>
+                                </TouchableOpacity>
+                            )}
+
+                            {['PENDING', 'RESOLVED', 'DECLINED'].includes(report?.status) && (user?.role === 'CITIZEN' || user?.role === 'DEPT_ADMIN') && (
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, styles.deleteBtn]}
+                                    onPress={handleDelete}
+                                >
+                                    <Ionicons name="trash-outline" size={20} color={COLORS.white} />
+                                    <Text style={styles.actionBtnText}>Delete</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
                     </View>
+                    <View style={{ height: 100 }} />
                 </ScrollView>
             </View>
         </ScreenWrapper>
@@ -493,6 +569,34 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: COLORS.text,
         marginBottom: 8,
+    },
+    actionRow: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 20,
+        borderTopWidth: 1,
+        borderTopColor: '#f0f0f0',
+        paddingTop: 15,
+    },
+    actionBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        borderRadius: 12,
+        gap: 8,
+    },
+    editBtn: {
+        backgroundColor: COLORS.primary,
+    },
+    deleteBtn: {
+        backgroundColor: COLORS.danger,
+    },
+    actionBtnText: {
+        color: COLORS.white,
+        fontWeight: 'bold',
+        fontSize: 15,
     }
 });
 

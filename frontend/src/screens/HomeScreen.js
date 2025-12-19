@@ -11,14 +11,37 @@ import { useLanguage } from '../context/LanguageContext';
 const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
 
 const HomeScreen = ({ navigation }) => {
+    const [departments, setDepartments] = useState([]);
     const { logout, user } = useAuth();
     const { t } = useLanguage();
+
     useEffect(() => {
-        // Any initial load logic
+        fetchDepartments();
     }, []);
 
+    const fetchDepartments = async () => {
+        try {
+            const response = await fetch(`${API_URL}/departments/`);
+            const data = await response.json();
+            if (response.ok) {
+                setDepartments(data);
+            }
+        } catch (error) {
+            console.error('Error fetching departments:', error);
+        }
+    };
+
     const handleEmergency = (type) => {
-        navigation.navigate('EmergencyTracking', { serviceName: type });
+        // Find the fire category ID if it's fire
+        const fireDept = departments.find(d => d.name.toLowerCase() === 'fire');
+
+        navigation.navigate('CreateReport', {
+            prefill: {
+                title: `${type} Emergency`,
+                description: `Emergency ${type} service requested.`,
+                category: fireDept?.id
+            }
+        });
     };
 
     const handleUtility = (type) => {

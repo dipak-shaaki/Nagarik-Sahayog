@@ -85,38 +85,55 @@ const ProfileScreen = ({ navigation }) => {
     };
 
     const handleDeleteReport = async (reportId) => {
-        Alert.alert(
-            "Delete Report",
-            "Are you sure you want to delete this pending report?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            const token = await AsyncStorage.getItem('userToken');
-                            const response = await fetch(`${API_URL}/reports/${reportId}/`, {
-                                method: 'DELETE',
-                                headers: {
-                                    'Authorization': `Bearer ${token}`,
-                                    'Content-Type': 'application/json'
-                                }
-                            });
-                            if (response.ok) {
-                                Alert.alert("Success", "Report deleted successfully.");
-                                fetchMyReports();
-                            } else {
-                                const data = await response.json().catch(() => ({}));
-                                Alert.alert("Error", data.error || `Failed to delete report (Status: ${response.status})`);
-                            }
-                        } catch (error) {
-                            Alert.alert("Error", "Connection error.");
-                        }
+        const deleteConfirmed = async () => {
+            try {
+                const token = await AsyncStorage.getItem('userToken');
+                const response = await fetch(`${API_URL}/reports/${reportId}/`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if (response.ok) {
+                    if (Platform.OS === 'web') {
+                        alert("Report deleted successfully.");
+                    } else {
+                        Alert.alert("Success", "Report deleted successfully.");
+                    }
+                    fetchMyReports();
+                } else {
+                    const data = await response.json().catch(() => ({}));
+                    const errorMsg = data.error || `Failed to delete report (Status: ${response.status})`;
+                    if (Platform.OS === 'web') {
+                        alert(errorMsg);
+                    } else {
+                        Alert.alert("Error", errorMsg);
                     }
                 }
-            ]
-        );
+            } catch (error) {
+                if (Platform.OS === 'web') {
+                    alert("Connection error.");
+                } else {
+                    Alert.alert("Error", "Connection error.");
+                }
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm("Are you sure you want to delete this report?")) {
+                deleteConfirmed();
+            }
+        } else {
+            Alert.alert(
+                "Delete Report",
+                "Are you sure you want to delete this report?",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Delete", style: "destructive", onPress: deleteConfirmed }
+                ]
+            );
+        }
     };
 
     const fetchMyReports = async () => {
@@ -163,6 +180,14 @@ const ProfileScreen = ({ navigation }) => {
                     <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
                         <Text style={styles.statusText}>{item.status}</Text>
                     </View>
+                    {item.status === 'PENDING' && (
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('CreateReport', { report: item })}
+                            style={{ padding: 5 }}
+                        >
+                            <Ionicons name="create-outline" size={18} color={COLORS.primary} />
+                        </TouchableOpacity>
+                    )}
                     {['PENDING', 'RESOLVED', 'DECLINED'].includes(item.status) && (
                         <TouchableOpacity
                             onPress={() => handleDeleteReport(item.id)}

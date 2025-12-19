@@ -3,6 +3,8 @@ import FieldOfficialDashboardScreen from '../screens/FieldOfficialDashboardScree
 import MapScreen from '../screens/MapScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AlertsScreen from '../screens/AlertsScreen';
+import ReportScreen from '../screens/ReportScreen';
+import ReportTrackingScreen from '../screens/ReportTrackingScreen';
 
 const Stack = createStackNavigator();
 
@@ -31,6 +33,16 @@ const OfficialNavigator = () => {
                 name="Alerts"
                 component={AlertsScreen}
                 options={{ title: 'Notifications' }}
+            />
+            <Stack.Screen
+                name="CreateReport"
+                component={ReportScreen}
+                options={{ title: 'Edit Report' }}
+            />
+            <Stack.Screen
+                name="ReportTracking"
+                component={ReportTrackingScreen}
+                options={{ title: 'Report Tracking' }}
             />
         </Stack.Navigator>
     );

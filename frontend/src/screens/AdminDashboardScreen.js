@@ -103,46 +103,63 @@ const AdminDashboardScreen = ({ navigation }) => {
     };
 
     const handleDeleteReport = async () => {
-        Alert.alert(
-            'Delete Report',
-            'Are you sure you want to delete this report? This action cannot be undone.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            if (!selectedReport?.id) {
-                                Alert.alert('Error', 'Invalid Report ID');
-                                return;
-                            }
-                            const token = await AsyncStorage.getItem('userToken');
-                            console.log('Attempting to delete report:', selectedReport.id);
+        const deleteConfirmed = async () => {
+            try {
+                if (!selectedReport?.id) {
+                    Alert.alert('Error', 'Invalid Report ID');
+                    return;
+                }
+                const token = await AsyncStorage.getItem('userToken');
+                console.log('Attempting to delete report:', selectedReport.id);
 
-                            const response = await fetch(`${API_URL}/reports/${selectedReport.id}/`, {
-                                method: 'DELETE',
-                                headers: { 'Authorization': `Bearer ${token}` }
-                            });
+                const response = await fetch(`${API_URL}/reports/${selectedReport.id}/`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
 
-                            if (response.ok) {
-                                console.log('Delete successful');
-                                Alert.alert('Success', 'Report deleted successfully');
-                                setShowDetailModal(false);
-                                fetchReports();
-                            } else {
-                                const errorText = await response.text();
-                                console.error('Delete failed:', response.status, errorText);
-                                Alert.alert('Error', `Failed to delete report: ${response.status}`);
-                            }
-                        } catch (error) {
-                            console.error('Delete connection error:', error);
-                            Alert.alert('Error', 'Connection error');
-                        }
+                if (response.ok) {
+                    console.log('Delete successful');
+                    if (Platform.OS === 'web') {
+                        alert('Report deleted successfully');
+                    } else {
+                        Alert.alert('Success', 'Report deleted successfully');
+                    }
+                    setShowDetailModal(false);
+                    fetchReports();
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    console.error('Delete failed:', response.status, errorData);
+                    const errorMsg = errorData.error || `Failed to delete report: ${response.status}`;
+                    if (Platform.OS === 'web') {
+                        alert(errorMsg);
+                    } else {
+                        Alert.alert('Error', errorMsg);
                     }
                 }
-            ]
-        );
+            } catch (error) {
+                console.error('Delete connection error:', error);
+                if (Platform.OS === 'web') {
+                    alert('Connection error');
+                } else {
+                    Alert.alert('Error', 'Connection error');
+                }
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm('Are you sure you want to delete this report? This action cannot be undone.')) {
+                deleteConfirmed();
+            }
+        } else {
+            Alert.alert(
+                'Delete Report',
+                'Are you sure you want to delete this report? This action cannot be undone.',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Delete', style: 'destructive', onPress: deleteConfirmed }
+                ]
+            );
+        }
     };
 
     const getStatusColor = (status) => {
@@ -413,13 +430,28 @@ const AdminDashboardScreen = ({ navigation }) => {
                                     </TouchableOpacity>
                                 )}
 
-                                <TouchableOpacity
-                                    style={[styles.actionBtn, styles.deleteBtn]}
-                                    onPress={handleDeleteReport}
-                                >
-                                    <Ionicons name="trash" size={20} color={COLORS.white} />
-                                    <Text style={styles.btnText}>Delete</Text>
-                                </TouchableOpacity>
+                                {user?.role === 'DEPT_ADMIN' && (
+                                    <>
+                                        <TouchableOpacity
+                                            style={[styles.actionBtn, { backgroundColor: COLORS.info || COLORS.primary }]}
+                                            onPress={() => {
+                                                setShowDetailModal(false);
+                                                navigation.navigate('CreateReport', { report: selectedReport });
+                                            }}
+                                        >
+                                            <Ionicons name="create" size={20} color={COLORS.white} />
+                                            <Text style={styles.btnText}>Edit</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={[styles.actionBtn, styles.deleteBtn]}
+                                            onPress={handleDeleteReport}
+                                        >
+                                            <Ionicons name="trash" size={20} color={COLORS.white} />
+                                            <Text style={styles.btnText}>Delete</Text>
+                                        </TouchableOpacity>
+                                    </>
+                                )}
                             </View>
                         </View>
                     </View>

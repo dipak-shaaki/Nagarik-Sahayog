@@ -42,6 +42,12 @@ export const CATEGORIES = [
         color: '#1ABC9C',
     },
     {
+        id: 'fire',
+        name: 'Fire',
+        icon: 'flame',
+        color: '#E74C3C',
+    },
+    {
         id: 'other',
         name: 'Other',
         icon: 'help-circle',
