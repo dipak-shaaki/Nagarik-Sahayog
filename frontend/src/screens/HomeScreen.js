@@ -102,19 +102,19 @@ const HomeScreen = ({ navigation }) => {
                             title={t('police')}
                             icon={<MaterialIcons name="local-police" size={32} color={COLORS.white} />}
                             color="#2C3E50"
-                            onPress={() => handleEmergency(t('police'))}
+                            onPress={() => handleEmergency('Police')}
                         />
                         <EmergencyButton
                             title={t('ambulance')}
                             icon={<FontAwesome5 name="ambulance" size={28} color={COLORS.white} />}
                             color="#E74C3C"
-                            onPress={() => handleEmergency(t('ambulance'))}
+                            onPress={() => handleEmergency('Ambulance')}
                         />
                         <EmergencyButton
                             title={t('fire')}
                             icon={<MaterialIcons name="local-fire-department" size={32} color={COLORS.white} />}
                             color="#F39C12"
-                            onPress={() => handleEmergency(t('fire'))}
+                            onPress={() => handleEmergency('Fire')}
                         />
                     </View>
                 </View>

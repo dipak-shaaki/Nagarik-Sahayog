@@ -2,13 +2,15 @@ from rest_framework import viewsets, permissions, status, generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
-from .models import Department, Report
+from .models import Department, Report, EmergencyRequest, FieldOfficialLocation
 from .permissions import IsSuperAdmin, IsDeptAdmin, IsOfficial
 from .serializers import (
     DepartmentSerializer, UserSerializer, 
     RegisterSerializer, ReportSerializer,
-    AdminRegistrationSerializer
+    AdminRegistrationSerializer, EmergencyRequestSerializer,
+    FieldOfficialLocationSerializer
 )
+import math
 
 User = get_user_model()
 
@@ -158,3 +160,123 @@ class DeclineReportView(APIView):
             return Response({'status': 'declined', 'new_status': 'DECLINED'}, status=status.HTTP_200_OK)
         except Report.DoesNotExist:
             return Response({'error': 'Report not found or not assigned to you'}, status=status.HTTP_404_NOT_FOUND)
+
+class EmergencyRequestViewSet(viewsets.ModelViewSet):
+    serializer_class = EmergencyRequestSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'CITIZEN':
+            return EmergencyRequest.objects.filter(citizen=user)
+        elif user.role == 'FIELD_OFFICIAL':
+            return EmergencyRequest.objects.filter(assigned_official=user)
+        return EmergencyRequest.objects.all()
+
+    def perform_create(self, serializer):
+        # 1. Save the request
+        emergency = serializer.save(citizen=self.request.user)
+        
+        # 2. Find nearest available official
+        service_type = emergency.service_type
+        # Map service_type to department name (simplified)
+        dept_name_map = {
+            'AMBULANCE': 'Health',
+            'FIRE': 'Fire Department',
+            'POLICE': 'Police'
+        }
+        target_dept_name = dept_name_map.get(service_type)
+        
+        # Find officials in that department who are available
+        officials = User.objects.filter(
+            role='FIELD_OFFICIAL',
+            department__name__icontains=target_dept_name or service_type
+        )
+
+        nearest_official = None
+        min_dist = float('inf')
+
+        for official in officials:
+            # Ensure location exists
+            loc, _ = FieldOfficialLocation.objects.get_or_create(
+                official=official,
+                defaults={'latitude': 27.7172, 'longitude': 85.3240}
+            )
+            
+            if not loc.is_available:
+                continue
+
+            dist = self.calculate_distance(
+                emergency.latitude, emergency.longitude,
+                loc.latitude, loc.longitude
+            )
+            if dist < min_dist:
+                min_dist = dist
+                nearest_official = official
+
+        if nearest_official:
+            emergency.assigned_official = nearest_official
+            emergency.status = 'DISPATCHED'
+            # Mark official as unavailable
+            loc = nearest_official.current_location
+            loc.is_available = False
+            loc.save()
+            emergency.save()
+
+    def calculate_distance(self, lat1, lon1, lat2, lon2):
+        R = 6371 # Earth radius in km
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat / 2) * math.sin(dlat / 2) + \
+            math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * \
+            math.sin(dlon / 2) * math.sin(dlon / 2)
+        c = 2 * math.atan2(math.sqrt(a), Math.sqrt(1 - a))
+        return R * c
+
+class UpdateLocationView(APIView):
+    permission_classes = (IsOfficial,)
+
+    def post(self, request):
+        lat = request.data.get('latitude')
+        lon = request.data.get('longitude')
+        
+        loc, created = FieldOfficialLocation.objects.get_or_create(official=request.user)
+        loc.latitude = lat
+        loc.longitude = lon
+        loc.save()
+        
+        return Response({'status': 'location updated'})
+
+class SimulateMovementView(APIView):
+    """Simulates the official moving towards the emergency location"""
+    def post(self, request, pk):
+        try:
+            emergency = EmergencyRequest.objects.get(pk=pk)
+            if not emergency.assigned_official:
+                return Response({'error': 'No official assigned'}, status=400)
+            
+            official_loc, _ = FieldOfficialLocation.objects.get_or_create(official=emergency.assigned_official)
+            
+            # Move 10% closer to the destination
+            step = 0.1
+            official_loc.latitude += (emergency.latitude - official_loc.latitude) * step
+            official_loc.longitude += (emergency.longitude - official_loc.longitude) * step
+            
+            # If very close, mark as arrived
+            dist = math.sqrt((emergency.latitude - official_loc.latitude)**2 + (emergency.longitude - official_loc.longitude)**2)
+            if dist < 0.0001:
+                emergency.status = 'ARRIVED'
+                emergency.save()
+            elif emergency.status == 'DISPATCHED':
+                emergency.status = 'EN_ROUTE'
+                emergency.save()
+                
+            official_loc.save()
+            
+            return Response({
+                'latitude': official_loc.latitude,
+                'longitude': official_loc.longitude,
+                'status': emergency.status
+            })
+        except EmergencyRequest.DoesNotExist:
+            return Response({'error': 'Not found'}, status=404)

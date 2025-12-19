@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Department, Report
+from .models import Department, Report, EmergencyRequest, FieldOfficialLocation
 
 User = get_user_model()
 
@@ -70,3 +70,26 @@ class ReportSerializer(serializers.ModelSerializer):
         model = Report
         fields = '__all__'
         read_only_fields = ('citizen', 'status', 'assigned_official')
+
+class FieldOfficialLocationSerializer(serializers.ModelSerializer):
+    official_name = serializers.ReadOnlyField(source='official.first_name')
+    phone_number = serializers.ReadOnlyField(source='official.phone')
+
+    class Meta:
+        model = FieldOfficialLocation
+        fields = '__all__'
+
+class EmergencyRequestSerializer(serializers.ModelSerializer):
+    citizen_name = serializers.ReadOnlyField(source='citizen.first_name')
+    assigned_official_details = UserSerializer(source='assigned_official', read_only=True)
+    unit_location = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EmergencyRequest
+        fields = '__all__'
+        read_only_fields = ('citizen', 'status', 'assigned_official')
+
+    def get_unit_location(self, obj):
+        if obj.assigned_official and hasattr(obj.assigned_official, 'current_location'):
+            return FieldOfficialLocationSerializer(obj.assigned_official.current_location).data
+        return None

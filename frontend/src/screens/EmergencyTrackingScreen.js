@@ -1,21 +1,20 @@
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import ScreenWrapper from '../components/ScreenWrapper';
 import { COLORS, SHADOWS } from '../constants/theme';
 
-const { width } = Dimensions.get('window');
+import { API_URL } from '../context/AuthContext';
 
-// WebSocket connection for real-time updates
-const WS_URL = 'wss://your-backend.com/ws/emergency-tracking/';
+const { width, height } = Dimensions.get('window');
 
 const EmergencyTrackingScreen = ({ route, navigation }) => {
-    const { serviceName, emergencyRequestId } = route.params || { 
-        serviceName: 'Emergency',
-        emergencyRequestId: null 
-    };
-    
+    const { serviceName } = route.params || { serviceName: 'Emergency' };
+    const [emergencyRequestId, setEmergencyRequestId] = useState(route.params?.emergencyRequestId);
+
     const [status, setStatus] = useState('pending');
     const [statusMessage, setStatusMessage] = useState('Finding nearest unit...');
     const [eta, setEta] = useState(null);
@@ -23,296 +22,196 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
     const [unitDetails, setUnitDetails] = useState(null);
     const [unitLocation, setUnitLocation] = useState(null);
     const [userLocation, setUserLocation] = useState(null);
-    const [trackingHistory, setTrackingHistory] = useState([]);
-    
-    const wsRef = useRef(null);
-    const locationSubscription = useRef(null);
 
-    // Initialize location tracking
+    const mapRef = useRef(null);
+    const locationSubscription = useRef(null);
+    const simulationInterval = useRef(null);
+
     useEffect(() => {
         initializeTracking();
         return () => {
-            cleanup();
+            if (locationSubscription.current) locationSubscription.current.remove();
+            if (simulationInterval.current) clearInterval(simulationInterval.current);
         };
     }, []);
 
+    // Simulation loop
+    useEffect(() => {
+        if (emergencyRequestId && (status === 'DISPATCHED' || status === 'EN_ROUTE')) {
+            simulationInterval.current = setInterval(() => {
+                simulateMovement();
+            }, 3000);
+        } else {
+            if (simulationInterval.current) clearInterval(simulationInterval.current);
+        }
+        return () => {
+            if (simulationInterval.current) clearInterval(simulationInterval.current);
+        };
+    }, [emergencyRequestId, status]);
+
     const initializeTracking = async () => {
         try {
-            // Request location permissions
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Permission Denied', 'Location permission is required for emergency tracking');
+            const { status: pStatus } = await Location.requestForegroundPermissionsAsync();
+            if (pStatus !== 'granted') {
+                Alert.alert('Permission Denied', 'Location permission is required');
                 return;
             }
 
-            // Get initial user location
-            const location = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.High
-            });
-            
-            setUserLocation({
+            const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+            const coords = {
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude
-            });
+            };
+            setUserLocation(coords);
 
-            // Start watching user location (in case they move)
-            locationSubscription.current = await Location.watchPositionAsync(
-                {
-                    accuracy: Location.Accuracy.High,
-                    timeInterval: 5000, // Update every 5 seconds
-                    distanceInterval: 10, // Update every 10 meters
-                },
-                (newLocation) => {
-                    setUserLocation({
-                        latitude: newLocation.coords.latitude,
-                        longitude: newLocation.coords.longitude
-                    });
-                    // Send updated location to backend via WebSocket
-                    if (wsRef.current?.readyState === WebSocket.OPEN) {
-                        wsRef.current.send(JSON.stringify({
-                            type: 'user_location_update',
-                            location: {
-                                latitude: newLocation.coords.latitude,
-                                longitude: newLocation.coords.longitude
-                            }
-                        }));
-                    }
-                }
-            );
-
-            // Connect to WebSocket for real-time updates
-            connectWebSocket();
-
-            // Initial API call to create/fetch emergency request
+            // Create request if not exists
             if (!emergencyRequestId) {
-                createEmergencyRequest(location.coords);
+                await createEmergencyRequest(coords);
             } else {
                 fetchEmergencyDetails();
             }
 
+            // Watch position
+            locationSubscription.current = await Location.watchPositionAsync(
+                { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 10 },
+                (newLoc) => {
+                    setUserLocation({
+                        latitude: newLoc.coords.latitude,
+                        longitude: newLoc.coords.longitude
+                    });
+                }
+            );
         } catch (error) {
-            console.error('Error initializing tracking:', error);
-            Alert.alert('Error', 'Failed to initialize tracking');
-        }
-    };
-
-    const connectWebSocket = () => {
-        const ws = new WebSocket(`${WS_URL}${emergencyRequestId}/`);
-        
-        ws.onopen = () => {
-            console.log('WebSocket connected');
-        };
-
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            handleWebSocketMessage(data);
-        };
-
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
-
-        ws.onclose = () => {
-            console.log('WebSocket closed, attempting to reconnect...');
-            // Attempt to reconnect after 3 seconds
-            setTimeout(() => {
-                if (status !== 'completed' && status !== 'cancelled') {
-                    connectWebSocket();
-                }
-            }, 3000);
-        };
-
-        wsRef.current = ws;
-    };
-
-    const handleWebSocketMessage = (data) => {
-        switch (data.type) {
-            case 'status_update':
-                setStatus(data.status);
-                setStatusMessage(data.message);
-                if (data.eta) setEta(data.eta);
-                if (data.distance) setDistance(data.distance);
-                break;
-
-            case 'unit_assigned':
-                setUnitDetails(data.unit);
-                setStatusMessage('Unit dispatched to your location');
-                break;
-
-            case 'unit_location_update':
-                setUnitLocation(data.location);
-                // Calculate new ETA and distance based on location
-                if (userLocation) {
-                    calculateDistanceAndETA(data.location, userLocation);
-                }
-                break;
-
-            case 'tracking_update':
-                setTrackingHistory(prev => [...prev, data.update]);
-                break;
-
-            case 'emergency_completed':
-                setStatus('completed');
-                setStatusMessage('Emergency service completed');
-                Alert.alert('Completed', 'Emergency service has been completed');
-                break;
-
-            default:
-                console.log('Unknown message type:', data.type);
+            console.error('Init error:', error);
         }
     };
 
     const createEmergencyRequest = async (coords) => {
         try {
-            const response = await fetch('https://your-backend.com/api/emergency/request/', {
+            const token = await AsyncStorage.getItem('userToken');
+            const response = await fetch(`${API_URL}/emergency/requests/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${yourAuthToken}` // Add your auth token
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
-                    service_type: serviceName.toLowerCase(),
-                    location: {
-                        latitude: coords.latitude,
-                        longitude: coords.longitude
-                    },
-                    address: await getAddressFromCoords(coords.latitude, coords.longitude)
+                    service_type: serviceName.toUpperCase(),
+                    latitude: coords.latitude,
+                    longitude: coords.longitude,
+                    address: 'Current Location'
                 })
             });
 
             const data = await response.json();
             if (response.ok) {
-                // Update the emergencyRequestId and reconnect WebSocket
-                navigation.setParams({ emergencyRequestId: data.id });
+                setEmergencyRequestId(data.id);
+                updateFromData(data);
+            } else {
+                Alert.alert('Error', data.detail || 'Failed to create request');
             }
         } catch (error) {
-            console.error('Error creating emergency request:', error);
-            Alert.alert('Error', 'Failed to create emergency request');
+            console.error('Create error:', error);
         }
     };
 
     const fetchEmergencyDetails = async () => {
+        if (!emergencyRequestId) return;
         try {
-            const response = await fetch(
-                `https://your-backend.com/api/emergency/request/${emergencyRequestId}/`,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${yourAuthToken}`
-                    }
-                }
-            );
-
+            const token = await AsyncStorage.getItem('userToken');
+            const response = await fetch(`${API_URL}/emergency/requests/${emergencyRequestId}/`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             const data = await response.json();
             if (response.ok) {
-                setStatus(data.status);
-                setStatusMessage(data.status_message);
-                if (data.unit) setUnitDetails(data.unit);
-                if (data.eta) setEta(data.eta);
-                if (data.distance) setDistance(data.distance);
-                if (data.unit_location) setUnitLocation(data.unit_location);
+                updateFromData(data);
             }
         } catch (error) {
-            console.error('Error fetching emergency details:', error);
+            console.error('Fetch error:', error);
+        }
+    };
+
+    const simulateMovement = async () => {
+        try {
+            const token = await AsyncStorage.getItem('userToken');
+            const response = await fetch(`${API_URL}/emergency/simulate/${emergencyRequestId}/`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await response.json();
+            if (response.ok) {
+                setUnitLocation({
+                    latitude: data.latitude,
+                    longitude: data.longitude
+                });
+                if (data.status !== status) {
+                    setStatus(data.status);
+                    fetchEmergencyDetails(); // Refresh full details on status change
+                }
+                if (userLocation) {
+                    calculateDistanceAndETA({ latitude: data.latitude, longitude: data.longitude }, userLocation);
+                }
+            }
+        } catch (error) {
+            console.error('Simulate error:', error);
+        }
+    };
+
+    const updateFromData = (data) => {
+        setStatus(data.status);
+        setStatusMessage(getStatusMessage(data.status));
+        if (data.assigned_official_details) {
+            setUnitDetails({
+                officer_name: data.assigned_official_details.first_name,
+                phone_number: data.assigned_official_details.phone,
+                unit_number: data.assigned_official_details.id,
+                vehicle_number: 'BA 2 JHA 1234'
+            });
+        }
+        if (data.unit_location) {
+            const loc = {
+                latitude: data.unit_location.latitude,
+                longitude: data.unit_location.longitude
+            };
+            setUnitLocation(loc);
+            if (userLocation) calculateDistanceAndETA(loc, userLocation);
+        }
+    };
+
+    const getStatusMessage = (status) => {
+        switch (status) {
+            case 'PENDING': return 'Finding nearest unit...';
+            case 'DISPATCHED': return 'Unit dispatched to your location';
+            case 'EN_ROUTE': return 'Unit is on the way';
+            case 'ARRIVED': return 'Unit has arrived!';
+            case 'COMPLETED': return 'Service completed';
+            case 'CANCELLED': return 'Request cancelled';
+            default: return 'Processing...';
         }
     };
 
     const calculateDistanceAndETA = (unitLoc, userLoc) => {
-        // Haversine formula to calculate distance
-        const R = 6371; // Earth's radius in km
-        const dLat = toRad(userLoc.latitude - unitLoc.latitude);
-        const dLon = toRad(userLoc.longitude - unitLoc.longitude);
-        
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(toRad(unitLoc.latitude)) * Math.cos(toRad(userLoc.latitude)) *
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        const distanceKm = R * c;
-        
-        setDistance(distanceKm.toFixed(2));
-        
-        // Estimate ETA (assuming average speed of 40 km/h in Nepal's traffic)
-        const avgSpeed = 40;
-        const etaMinutes = Math.round((distanceKm / avgSpeed) * 60);
-        setEta(`${etaMinutes} mins`);
-    };
-
-    const toRad = (degrees) => {
-        return degrees * (Math.PI / 180);
-    };
-
-    const getAddressFromCoords = async (latitude, longitude) => {
-        try {
-            const addresses = await Location.reverseGeocodeAsync({ latitude, longitude });
-            if (addresses.length > 0) {
-                const addr = addresses[0];
-                return `${addr.street || ''}, ${addr.district || ''}, ${addr.city || ''}`.trim();
-            }
-        } catch (error) {
-            console.error('Error getting address:', error);
-        }
-        return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-    };
-
-    const callUnit = () => {
-        if (unitDetails?.phone_number) {
-            // Implement phone call functionality
-            Alert.alert('Call Unit', `Calling ${unitDetails.phone_number}`);
-        }
-    };
-
-    const cancelEmergency = () => {
-        Alert.alert(
-            'Cancel Emergency',
-            'Are you sure you want to cancel this emergency request?',
-            [
-                { text: 'No', style: 'cancel' },
-                {
-                    text: 'Yes',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await fetch(
-                                `https://your-backend.com/api/emergency/request/${emergencyRequestId}/cancel/`,
-                                {
-                                    method: 'POST',
-                                    headers: {
-                                        'Authorization': `Bearer ${yourAuthToken}`
-                                    }
-                                }
-                            );
-                            navigation.goBack();
-                        } catch (error) {
-                            console.error('Error cancelling emergency:', error);
-                        }
-                    }
-                }
-            ]
-        );
-    };
-
-    const cleanup = () => {
-        if (locationSubscription.current) {
-            locationSubscription.current.remove();
-        }
-        if (wsRef.current) {
-            wsRef.current.close();
-        }
+        const R = 6371;
+        const dLat = (userLoc.latitude - unitLoc.latitude) * Math.PI / 180;
+        const dLon = (userLoc.longitude - unitLoc.longitude) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(unitLoc.latitude * Math.PI / 180) * Math.cos(userLoc.latitude * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const dist = R * c;
+        setDistance(dist.toFixed(2));
+        const etaMin = Math.round((dist / 40) * 60);
+        setEta(etaMin > 0 ? `${etaMin} mins` : 'Arriving');
     };
 
     const getStatusColor = () => {
         switch (status) {
-            case 'dispatched':
-            case 'en_route':
-                return COLORS.warning;
-            case 'arrived':
-                return COLORS.success;
-            case 'completed':
-                return COLORS.success;
-            case 'cancelled':
-                return COLORS.danger;
-            default:
-                return COLORS.primary;
+            case 'DISPATCHED':
+            case 'EN_ROUTE': return COLORS.warning;
+            case 'ARRIVED':
+            case 'COMPLETED': return COLORS.success;
+            case 'CANCELLED': return COLORS.danger;
+            default: return COLORS.primary;
         }
     };
 
@@ -326,38 +225,47 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
                     <Text style={styles.title}>{serviceName} Tracking</Text>
                 </View>
 
-                {/* Map Placeholder - Replace with actual map library like react-native-maps */}
-                <View style={[styles.mapContainer, SHADOWS.medium]}>
-                    <Image
-                        source={{ uri: 'https://placehold.co/400x400/e0e0e0/808080?text=Map+View' }}
-                        style={styles.mapImage}
-                    />
-                    
-                    {/* User Location Pin */}
+                <MapView
+                    ref={mapRef}
+                    style={styles.map}
+                    provider={PROVIDER_GOOGLE}
+                    initialRegion={{
+                        latitude: userLocation?.latitude || 27.7172,
+                        longitude: userLocation?.longitude || 85.3240,
+                        latitudeDelta: 0.05,
+                        longitudeDelta: 0.05,
+                    }}
+                >
                     {userLocation && (
-                        <View style={styles.pinContainer}>
-                            <MaterialIcons name="location-on" size={40} color={COLORS.danger} />
-                        </View>
-                    )}
-
-                    {/* Unit Icon */}
-                    {unitLocation && (
-                        <View style={styles.unitContainer}>
-                            <View style={styles.unitIconBg}>
-                                <MaterialIcons name="local-police" size={24} color={COLORS.white} />
+                        <Marker coordinate={userLocation} title="You">
+                            <View style={styles.userMarker}>
+                                <View style={styles.userMarkerDot} />
                             </View>
-                        </View>
+                        </Marker>
                     )}
 
-                    {/* Distance Badge */}
-                    {distance && (
-                        <View style={styles.distanceBadge}>
-                            <Text style={styles.distanceText}>{distance} km away</Text>
-                        </View>
+                    {unitLocation && (
+                        <Marker coordinate={unitLocation} title="Emergency Unit">
+                            <View style={styles.unitMarker}>
+                                <MaterialIcons
+                                    name={serviceName === 'Police' ? 'local-police' : serviceName === 'Fire' ? 'fire-truck' : 'medical-services'}
+                                    size={24}
+                                    color={COLORS.white}
+                                />
+                            </View>
+                        </Marker>
                     )}
-                </View>
 
-                {/* Status Card */}
+                    {userLocation && unitLocation && (
+                        <Polyline
+                            coordinates={[unitLocation, userLocation]}
+                            strokeColor={COLORS.primary}
+                            strokeWidth={3}
+                            lineDashPattern={[5, 5]}
+                        />
+                    )}
+                </MapView>
+
                 <View style={[styles.statusCard, SHADOWS.large]}>
                     <View style={styles.statusHeader}>
                         <View style={styles.statusLeft}>
@@ -369,43 +277,28 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
 
                     {unitDetails && (
                         <View style={styles.driverInfo}>
-                            <Image 
-                                source={{ uri: unitDetails.officer_image || 'https://randomuser.me/api/portraits/men/32.jpg' }} 
-                                style={styles.driverImage} 
+                            <Image
+                                source={{ uri: 'https://randomuser.me/api/portraits/men/32.jpg' }}
+                                style={styles.driverImage}
                             />
                             <View style={styles.driverDetails}>
-                                <Text style={styles.driverName}>{unitDetails.officer_name || 'Officer Ram Kumar'}</Text>
+                                <Text style={styles.driverName}>{unitDetails.officer_name}</Text>
                                 <Text style={styles.vehicleInfo}>
-                                    Unit #{unitDetails.unit_number || '402'} • {unitDetails.vehicle_number || 'Ba 2 Jha 1234'}
+                                    Unit #{unitDetails.unit_number} • {unitDetails.vehicle_number}
                                 </Text>
                             </View>
-                            <TouchableOpacity style={styles.callDriverButton} onPress={callUnit}>
+                            <TouchableOpacity style={styles.callDriverButton} onPress={() => Alert.alert('Calling', `Calling ${unitDetails.phone_number}`)}>
                                 <Ionicons name="call" size={24} color={COLORS.primary} />
                             </TouchableOpacity>
                         </View>
                     )}
 
                     <View style={styles.timeline}>
-                        <View style={[styles.timelineDot, { 
-                            backgroundColor: ['pending', 'dispatched', 'en_route', 'arrived', 'completed'].includes(status) 
-                                ? COLORS.success : COLORS.textLight 
-                        }]} />
-                        <View style={[styles.timelineLine, { 
-                            backgroundColor: ['dispatched', 'en_route', 'arrived', 'completed'].includes(status) 
-                                ? COLORS.success : COLORS.textLight 
-                        }]} />
-                        <View style={[styles.timelineDot, { 
-                            backgroundColor: ['dispatched', 'en_route', 'arrived', 'completed'].includes(status) 
-                                ? COLORS.success : COLORS.textLight 
-                        }]} />
-                        <View style={[styles.timelineLine, { 
-                            backgroundColor: ['en_route', 'arrived', 'completed'].includes(status) 
-                                ? COLORS.success : COLORS.textLight 
-                        }]} />
-                        <View style={[styles.timelineDot, { 
-                            backgroundColor: ['arrived', 'completed'].includes(status) 
-                                ? COLORS.success : COLORS.textLight 
-                        }]} />
+                        <View style={[styles.timelineDot, { backgroundColor: ['PENDING', 'DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'COMPLETED'].includes(status) ? COLORS.success : COLORS.textLight }]} />
+                        <View style={[styles.timelineLine, { backgroundColor: ['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'COMPLETED'].includes(status) ? COLORS.success : COLORS.textLight }]} />
+                        <View style={[styles.timelineDot, { backgroundColor: ['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'COMPLETED'].includes(status) ? COLORS.success : COLORS.textLight }]} />
+                        <View style={[styles.timelineLine, { backgroundColor: ['ARRIVED', 'COMPLETED'].includes(status) ? COLORS.success : COLORS.textLight }]} />
+                        <View style={[styles.timelineDot, { backgroundColor: ['ARRIVED', 'COMPLETED'].includes(status) ? COLORS.success : COLORS.textLight }]} />
                     </View>
                     <View style={styles.timelineLabels}>
                         <Text style={styles.timelineLabel}>Requested</Text>
@@ -413,8 +306,8 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
                         <Text style={styles.timelineLabel}>Arrived</Text>
                     </View>
 
-                    {status !== 'completed' && status !== 'cancelled' && (
-                        <TouchableOpacity style={styles.cancelButton} onPress={cancelEmergency}>
+                    {status !== 'COMPLETED' && status !== 'CANCELLED' && (
+                        <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
                             <Text style={styles.cancelButtonText}>Cancel Request</Text>
                         </TouchableOpacity>
                     )}
@@ -425,15 +318,13 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
+    container: { flex: 1 },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: 20,
         position: 'absolute',
-        top: 0,
+        top: 40,
         left: 0,
         zIndex: 10,
     },
@@ -448,67 +339,51 @@ const styles = StyleSheet.create({
         ...SHADOWS.small,
     },
     title: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: 'bold',
         color: COLORS.text,
         backgroundColor: 'rgba(255,255,255,0.9)',
-        paddingHorizontal: 15,
-        paddingVertical: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
         borderRadius: 8,
     },
-    mapContainer: {
-        flex: 1,
-        backgroundColor: '#e0e0e0',
+    map: { width: '100%', height: '100%' },
+    userMarker: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: 'rgba(33, 150, 243, 0.2)',
         justifyContent: 'center',
         alignItems: 'center',
     },
-    mapImage: {
-        width: '100%',
-        height: '100%',
-        resizeMode: 'cover',
+    userMarkerDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#2196F3',
+        borderWidth: 2,
+        borderColor: 'white',
     },
-    pinContainer: {
-        position: 'absolute',
-    },
-    unitContainer: {
-        position: 'absolute',
-        top: '40%',
-        left: '40%',
-    },
-    unitIconBg: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
+    unitMarker: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         backgroundColor: COLORS.primary,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 3,
-        borderColor: COLORS.white,
+        borderWidth: 2,
+        borderColor: 'white',
         ...SHADOWS.medium,
-    },
-    distanceBadge: {
-        position: 'absolute',
-        top: 100,
-        backgroundColor: COLORS.surface,
-        paddingHorizontal: 15,
-        paddingVertical: 8,
-        borderRadius: 20,
-        ...SHADOWS.small,
-    },
-    distanceText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: COLORS.text,
     },
     statusCard: {
         position: 'absolute',
         bottom: 0,
         width: '100%',
         backgroundColor: COLORS.surface,
-        borderTopLeftRadius: 25,
-        borderTopRightRadius: 25,
+        borderTopLeftRadius: 30,
+        borderTopRightRadius: 30,
         padding: 25,
-        paddingBottom: 40,
+        paddingBottom: Platform.OS === 'ios' ? 40 : 25,
     },
     statusHeader: {
         flexDirection: 'row',
@@ -516,55 +391,22 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 20,
     },
-    statusLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    statusDot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        marginRight: 10,
-    },
-    statusTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: COLORS.text,
-        flex: 1,
-    },
-    etaText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: COLORS.primary,
-    },
+    statusLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    statusDot: { width: 10, height: 10, borderRadius: 5, marginRight: 10 },
+    statusTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.text, flex: 1 },
+    etaText: { fontSize: 16, fontWeight: 'bold', color: COLORS.primary },
     driverInfo: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 25,
+        marginBottom: 20,
         backgroundColor: COLORS.background,
         padding: 15,
         borderRadius: 15,
     },
-    driverImage: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        marginRight: 15,
-    },
-    driverDetails: {
-        flex: 1,
-    },
-    driverName: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: COLORS.text,
-    },
-    vehicleInfo: {
-        fontSize: 14,
-        color: COLORS.textLight,
-        marginTop: 2,
-    },
+    driverImage: { width: 50, height: 50, borderRadius: 25, marginRight: 15 },
+    driverDetails: { flex: 1 },
+    driverName: { fontSize: 16, fontWeight: 'bold', color: COLORS.text },
+    vehicleInfo: { fontSize: 13, color: COLORS.textLight, marginTop: 2 },
     callDriverButton: {
         width: 45,
         height: 45,
@@ -578,40 +420,25 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 20,
+        paddingHorizontal: 30,
         marginBottom: 10,
     },
-    timelineDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-    },
-    timelineLine: {
-        flex: 1,
-        height: 2,
-        marginHorizontal: 5,
-    },
+    timelineDot: { width: 12, height: 12, borderRadius: 6 },
+    timelineLine: { flex: 1, height: 2, marginHorizontal: 5 },
     timelineLabels: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        paddingHorizontal: 10,
+        paddingHorizontal: 15,
         marginBottom: 20,
     },
-    timelineLabel: {
-        fontSize: 12,
-        color: COLORS.textLight,
-    },
+    timelineLabel: { fontSize: 11, color: COLORS.textLight },
     cancelButton: {
-        backgroundColor: COLORS.danger,
+        backgroundColor: COLORS.danger + '15',
         padding: 15,
         borderRadius: 12,
         alignItems: 'center',
     },
-    cancelButtonText: {
-        color: COLORS.white,
-        fontSize: 16,
-        fontWeight: '600',
-    },
+    cancelButtonText: { color: COLORS.danger, fontSize: 16, fontWeight: '600' },
 });
 
 export default EmergencyTrackingScreen;
