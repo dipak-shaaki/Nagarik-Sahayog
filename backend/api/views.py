@@ -302,29 +302,77 @@ class SimulateMovementView(APIView):
             
             official_loc, _ = FieldOfficialLocation.objects.get_or_create(official=emergency.assigned_official)
             
-            # Teleport for demo visibility if too far (squared distance check)
+            # Teleport if too close (< 500m) AND NO ACTIVE ROUTE, or wildly far (> 30km)
+            # This prevents "instant" arrival glitch on start, but allows legitimate arrival
+            is_active_route = bool(emergency.route_path and len(emergency.route_path) > 0)
             dist_sq = (emergency.latitude - official_loc.latitude)**2 + (emergency.longitude - official_loc.longitude)**2
             
-            # Initialize or reset route if invalid or finished
+            if (not is_active_route and dist_sq < 0.000025) or dist_sq > 0.09: # Approx 500m check only on start
+                 # Teleport to random location approx 2km away
+                angle = random.uniform(0, 2 * math.pi)
+                offset_dist = 0.02 # ~2km
+                official_loc.latitude = emergency.latitude + offset_dist * math.sin(angle)
+                official_loc.longitude = emergency.longitude + offset_dist * math.cos(angle)
+                emergency.route_path = None  # Reset route
+                print(f"DEBUG: Official repositioned to ~2km away for realistic approach")
+
+            # Fetch or use cached route
             if not emergency.route_path or emergency.current_route_step >= len(emergency.route_path) - 1:
-                # Generate a simple 20-step linear path from Official -> Citizen
-                # This guarantees movement without relying on external APIs
-                emergency.route_path = []
-                steps = 20
-                for i in range(steps + 1):
-                    t = i / steps
-                    lat = official_loc.latitude + (emergency.latitude - official_loc.latitude) * t
-                    lon = official_loc.longitude + (emergency.longitude - official_loc.longitude) * t
-                    emergency.route_path.append([lat, lon])
-                emergency.current_route_step = 0
-                emergency.save()
-                print("DEBUG: Generated new linear simulation path")
+                try:
+                    import requests
+                    # Request driving route from OSRM
+                    osrm_url = f"http://router.project-osrm.org/route/v1/driving/{official_loc.longitude},{official_loc.latitude};{emergency.longitude},{emergency.latitude}?overview=full&geometries=geojson&steps=true"
+                    response = requests.get(osrm_url, timeout=2)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if 'routes' in data and len(data['routes']) > 0:
+                            # Extract coordinates from GeoJSON
+                            route_coords = data['routes'][0]['geometry']['coordinates']
+                            # Convert [lon, lat] to [lat, lon]
+                            emergency.route_path = [[coord[1], coord[0]] for coord in route_coords]
+                            emergency.current_route_step = 0
+                            emergency.save()
+                            print(f"DEBUG: OSRM Route found: {len(emergency.route_path)} points via roads")
+                        else:
+                            raise Exception("No OSRM route found")
+                    else:
+                        raise Exception(f"OSRM status {response.status_code}")
+                except Exception as e:
+                    print(f"DEBUG: OSRM failed ({e}), using Manhattan fallback")
+                    # Manhattan Path Fallback (L-shape to look like roads)
+                    mid_lat = official_loc.latitude
+                    mid_lon = emergency.longitude
+                    
+                    # 3-point path: Start -> Corner -> End
+                    # Interpolate 20 steps for each leg
+                    emergency.route_path = []
+                    
+                    # Leg 1: Latitude change
+                    for i in range(20):
+                        t = i / 20
+                        emergency.route_path.append([
+                            official_loc.latitude + (mid_lat - official_loc.latitude) * t,
+                            official_loc.longitude + (mid_lon - official_loc.longitude) * t
+                        ])
+                        
+                    # Leg 2: Longitude change
+                    for i in range(21):
+                        t = i / 20
+                        emergency.route_path.append([
+                            mid_lat + (emergency.latitude - mid_lat) * t,
+                            mid_lon + (emergency.longitude - mid_lon) * t
+                        ])
+                    
+                    emergency.current_route_step = 0
+                    emergency.save()
 
             # Move along the route
             if emergency.route_path and len(emergency.route_path) > 0:
-                # Advance 1 step per call
+                # OSRM paths can be dense. Move 2 steps at a time for speed.
+                steps_per_update = 2
                 emergency.current_route_step = min(
-                    emergency.current_route_step + 1,
+                    emergency.current_route_step + steps_per_update,
                     len(emergency.route_path) - 1
                 )
                 
@@ -333,7 +381,7 @@ class SimulateMovementView(APIView):
                 official_loc.latitude = current_point[0]
                 official_loc.longitude = current_point[1]
                 
-                print(f"DEBUG: Simulation Step {emergency.current_route_step}/{len(emergency.route_path)}")
+                print(f"DEBUG: Driving.. Step {emergency.current_route_step}/{len(emergency.route_path)}")
                 emergency.save()
             
             # Check for arrival
