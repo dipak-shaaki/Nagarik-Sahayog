@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import ScreenWrapper from '../components/ScreenWrapper';
 import { COLORS, SHADOWS } from '../constants/theme';
@@ -42,12 +42,12 @@ const SuperAdminDashboardScreen = ({ navigation }) => {
                                 </TouchableOpacity>
                             </View>
                         </View>
-                        <Text style={styles.headerSubtitle}>Manage Departments & Global Settings</Text>
+                        <Text style={styles.headerSubtitle}>User Management & Department Controls</Text>
                     </LinearGradient>
                 </View>
 
                 <ScrollView style={[styles.content, { flex: 1 }]} showsVerticalScrollIndicator={false}>
-                    <Text style={styles.sectionTitle}>Manage Departments</Text>
+                    <Text style={styles.sectionTitle}>Control Center</Text>
 
                     <View style={styles.grid}>
                         <TouchableOpacity style={[styles.card, SHADOWS.medium]}>
@@ -74,40 +74,34 @@ const SuperAdminDashboardScreen = ({ navigation }) => {
                             <Text style={styles.cardSub}>2 Admins</Text>
                         </TouchableOpacity>
 
+                        <TouchableOpacity
+                            style={[styles.card, SHADOWS.medium]}
+                            onPress={() => navigation.navigate('CreateStaff')}
+                        >
+                            <View style={[styles.iconContainer, { backgroundColor: COLORS.secondary }]}>
+                                <Ionicons name="person-add" size={28} color="#fff" />
+                            </View>
+                            <Text style={styles.cardLabel}>New Staff</Text>
+                            <Text style={styles.cardSub}>Admins & Officials</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.card, SHADOWS.medium]}
+                            onPress={() => Alert.alert("User Management", "User control panel coming soon!")}
+                        >
+                            <View style={[styles.iconContainer, { backgroundColor: '#FF8066' }]}>
+                                <Ionicons name="people" size={28} color="#fff" />
+                            </View>
+                            <Text style={styles.cardLabel}>Users</Text>
+                            <Text style={styles.cardSub}>Control & Manage</Text>
+                        </TouchableOpacity>
+
                         <TouchableOpacity style={[styles.card, SHADOWS.medium, styles.addCard]}>
                             <Ionicons name="add" size={32} color={COLORS.primary} />
                             <Text style={[styles.cardLabel, { color: COLORS.primary }]}>New Dept</Text>
                         </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity
-                        style={[styles.manageReportsBtn, SHADOWS.medium]}
-                        onPress={() => navigation.navigate('AdminDashboard')}
-                    >
-                        <LinearGradient
-                            colors={[COLORS.secondary, '#2980b9']}
-                            style={styles.btnGradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                        >
-                            <Ionicons name="clipboard-outline" size={24} color={COLORS.white} />
-                            <Text style={styles.manageReportsText}>Manage All Reports</Text>
-                            <Ionicons name="arrow-forward" size={24} color={COLORS.white} style={{ marginLeft: 'auto' }} />
-                        </LinearGradient>
-                    </TouchableOpacity>
-
-                    <Text style={[styles.sectionTitle, { marginTop: 30 }]}>Global Stats</Text>
-                    <View style={[styles.statsCard, SHADOWS.medium]}>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>1,240</Text>
-                            <Text style={styles.statLabel}>Total Reports</Text>
-                        </View>
-                        <View style={styles.statDivider} />
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>85%</Text>
-                            <Text style={styles.statLabel}>Resolution Rate</Text>
-                        </View>
-                    </View>
                 </ScrollView>
             </View>
         </ScreenWrapper>
@@ -203,50 +197,11 @@ const styles = StyleSheet.create({
         color: COLORS.textLight,
         fontWeight: '600',
     },
-    manageReportsBtn: {
-        borderRadius: 20,
-        marginTop: 10,
-        overflow: 'hidden',
+    cardSub: {
+        fontSize: 12,
+        color: COLORS.textLight,
+        fontWeight: '600',
     },
-    btnGradient: {
-        padding: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    manageReportsText: {
-        color: COLORS.white,
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    statsCard: {
-        backgroundColor: COLORS.primary,
-        borderRadius: 24,
-        padding: 24,
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        marginBottom: 40,
-    },
-    statItem: {
-        alignItems: 'center',
-    },
-    statDivider: {
-        width: 1,
-        height: 40,
-        backgroundColor: 'rgba(255,255,255,0.3)',
-    },
-    statValue: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: COLORS.white,
-    },
-    statLabel: {
-        fontSize: 13,
-        color: 'rgba(255,255,255,0.9)',
-        marginTop: 4,
-        fontWeight: '500',
-    }
 });
 
 export default SuperAdminDashboardScreen;

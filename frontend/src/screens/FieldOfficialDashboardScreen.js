@@ -130,9 +130,13 @@ const FieldOfficialDashboardScreen = ({ navigation }) => {
                         style={styles.headerGradient}
                     >
                         <View style={styles.headerTop}>
-                            <View>
-                                <Text style={styles.headerTitle}>Field Tasks</Text>
-                                <Text style={styles.headerSubtitle}>{user?.first_name || user?.phone}</Text>
+                            <View style={styles.headerInfo}>
+                                <Text style={styles.welcomeText}>Welcome back,</Text>
+                                <Text style={styles.headerTitle}>{user?.first_name || 'Official'}</Text>
+                                <View style={styles.deptBadge}>
+                                    <Ionicons name="business" size={14} color="rgba(255,255,255,0.9)" />
+                                    <Text style={styles.deptText}>{user?.department_name || 'General Field'}</Text>
+                                </View>
                             </View>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
                                 <TouchableOpacity
@@ -156,20 +160,35 @@ const FieldOfficialDashboardScreen = ({ navigation }) => {
                             </View>
                         </View>
 
-                        <View style={styles.statsContainer}>
+                        <View style={styles.statsCard}>
                             <View style={styles.statItem}>
-                                <Text style={styles.statNumber}>{tasks.filter(t => t.status === 'ASSIGNED').length}</Text>
-                                <Text style={styles.statLabel}>Pending</Text>
+                                <View style={[styles.statIconContainer, { backgroundColor: 'rgba(255,107,107,0.2)' }]}>
+                                    <Ionicons name="time" size={20} color="#FF6B6B" />
+                                </View>
+                                <View>
+                                    <Text style={styles.statNumber}>{tasks.filter(t => t.status === 'ASSIGNED').length}</Text>
+                                    <Text style={styles.statLabel}>Pending</Text>
+                                </View>
                             </View>
-                            <View style={styles.dividerVertical} />
+                            <View style={styles.statDivider} />
                             <View style={styles.statItem}>
-                                <Text style={styles.statNumber}>{tasks.filter(t => ['TEAM_ARRIVED', 'IN_PROGRESS'].includes(t.status)).length}</Text>
-                                <Text style={styles.statLabel}>Active</Text>
+                                <View style={[styles.statIconContainer, { backgroundColor: 'rgba(77,150,255,0.2)' }]}>
+                                    <Ionicons name="construct" size={20} color="#4D96FF" />
+                                </View>
+                                <View>
+                                    <Text style={styles.statNumber}>{tasks.filter(t => ['TEAM_ARRIVED', 'IN_PROGRESS'].includes(t.status)).length}</Text>
+                                    <Text style={styles.statLabel}>Active</Text>
+                                </View>
                             </View>
-                            <View style={styles.dividerVertical} />
+                            <View style={styles.statDivider} />
                             <View style={styles.statItem}>
-                                <Text style={styles.statNumber}>{tasks.filter(t => t.status === 'RESOLVED').length}</Text>
-                                <Text style={styles.statLabel}>Resolved</Text>
+                                <View style={[styles.statIconContainer, { backgroundColor: 'rgba(107,203,119,0.2)' }]}>
+                                    <Ionicons name="checkmark-circle" size={20} color="#6BCB77" />
+                                </View>
+                                <View>
+                                    <Text style={styles.statNumber}>{tasks.filter(t => t.status === 'RESOLVED').length}</Text>
+                                    <Text style={styles.statLabel}>Resolved</Text>
+                                </View>
                             </View>
                         </View>
                     </LinearGradient>
@@ -191,28 +210,33 @@ const FieldOfficialDashboardScreen = ({ navigation }) => {
                                 setShowDetailModal(true);
                             }}
                         >
-                            <View style={[styles.card, SHADOWS.small]}>
+                            <View style={[styles.card, SHADOWS.medium]}>
                                 <View style={styles.cardHeader}>
-                                    <Text style={styles.cardTitle}>{item.title}</Text>
-                                    <View style={[styles.priorityBadge, { backgroundColor: COLORS.secondary }]}>
-                                        <Text style={styles.priorityText}>{item.status}</Text>
+                                    <View style={styles.categoryTag}>
+                                        <Ionicons name="folder-open" size={14} color={COLORS.primary} />
+                                        <Text style={styles.categoryTagText}>{item.category_name}</Text>
+                                    </View>
+                                    <View style={[styles.statusBadge, { backgroundColor: item.status === 'RESOLVED' ? COLORS.success : COLORS.secondary }]}>
+                                        <Text style={styles.statusText}>{item.status.replace('_', ' ')}</Text>
                                     </View>
                                 </View>
 
+                                <Text style={styles.cardTitle}>{item.title}</Text>
+
                                 <View style={styles.cardBody}>
                                     <View style={styles.infoRow}>
-                                        <Ionicons name="navigate-circle" size={16} color={COLORS.primary} />
-                                        <Text style={styles.infoText}>{item.location_address || `${item.latitude?.toFixed(4)}, ${item.longitude?.toFixed(4)}`}</Text>
+                                        <Ionicons name="location" size={16} color={COLORS.primary} />
+                                        <Text style={styles.infoText} numberOfLines={1}>{item.location_address || 'View on map'}</Text>
                                     </View>
                                     <View style={styles.infoRow}>
-                                        <Ionicons name="time-outline" size={16} color={COLORS.textLight} />
-                                        <Text style={styles.infoText}>Reported: {new Date(item.created_at).toLocaleDateString()}</Text>
+                                        <Ionicons name="calendar-outline" size={16} color={COLORS.textLight} />
+                                        <Text style={styles.infoText}>Reported on {new Date(item.created_at).toLocaleDateString()}</Text>
                                     </View>
                                 </View>
 
                                 <View style={styles.cardFooter}>
                                     <TouchableOpacity
-                                        style={styles.routeButton}
+                                        style={styles.navigateBtn}
                                         onPress={(e) => {
                                             e.stopPropagation();
                                             navigation.navigate('MapScreen', {
@@ -228,45 +252,50 @@ const FieldOfficialDashboardScreen = ({ navigation }) => {
                                             });
                                         }}
                                     >
-                                        <Ionicons name="map-outline" size={18} color={COLORS.white} />
-                                        <Text style={styles.routeButtonText}>Navigate</Text>
+                                        <LinearGradient
+                                            colors={[COLORS.primary, '#3498db']}
+                                            style={styles.btnGradient}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 0 }}
+                                        >
+                                            <Ionicons name="navigate-outline" size={18} color={COLORS.white} />
+                                            <Text style={styles.btnText}>Navigate</Text>
+                                        </LinearGradient>
                                     </TouchableOpacity>
 
                                     {item.status === 'ASSIGNED' && (
-                                        <View style={{ flexDirection: 'row', gap: 8, flex: 2 }}>
-                                            <TouchableOpacity
-                                                style={[styles.statusButton, { backgroundColor: COLORS.secondary }]}
-                                                onPress={(e) => {
-                                                    e.stopPropagation();
-                                                    handleStatusUpdate(item.id, 'TEAM_ARRIVED');
-                                                }}
-                                            >
-                                                <Text style={styles.statusButtonText}>Arrived</Text>
-                                            </TouchableOpacity>
-                                        </View>
+                                        <TouchableOpacity
+                                            style={[styles.actionBtn, { backgroundColor: COLORS.secondary }]}
+                                            onPress={(e) => {
+                                                e.stopPropagation();
+                                                handleStatusUpdate(item.id, 'TEAM_ARRIVED');
+                                            }}
+                                        >
+                                            <Text style={styles.actionBtnText}>Arrived</Text>
+                                        </TouchableOpacity>
                                     )}
 
                                     {item.status === 'TEAM_ARRIVED' && (
                                         <TouchableOpacity
-                                            style={[styles.statusButton, { backgroundColor: COLORS.info || '#3498DB', flex: 2 }]}
+                                            style={[styles.actionBtn, { backgroundColor: '#3498DB' }]}
                                             onPress={(e) => {
                                                 e.stopPropagation();
                                                 handleStatusUpdate(item.id, 'IN_PROGRESS');
                                             }}
                                         >
-                                            <Text style={styles.statusButtonText}>Start Work</Text>
+                                            <Text style={styles.actionBtnText}>Start Work</Text>
                                         </TouchableOpacity>
                                     )}
 
                                     {item.status === 'IN_PROGRESS' && (
                                         <TouchableOpacity
-                                            style={[styles.statusButton, { backgroundColor: COLORS.primary, flex: 2 }]}
+                                            style={[styles.actionBtn, { backgroundColor: COLORS.success }]}
                                             onPress={(e) => {
                                                 e.stopPropagation();
                                                 handleStatusUpdate(item.id, 'RESOLVED');
                                             }}
                                         >
-                                            <Text style={styles.statusButtonText}>Resolve</Text>
+                                            <Text style={styles.actionBtnText}>Finish</Text>
                                         </TouchableOpacity>
                                     )}
                                 </View>
@@ -488,124 +517,166 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 20,
     },
-    headerTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: COLORS.white,
-    },
-    headerSubtitle: {
-        fontSize: 14,
-        color: 'rgba(255,255,255,0.9)',
-        marginTop: 2,
-    },
-    iconButton: {
-        padding: 5,
-    },
-    statsContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        borderRadius: 15,
-        padding: 15,
-    },
-    statItem: {
-        alignItems: 'center',
+    headerInfo: {
         flex: 1,
     },
-    statNumber: {
-        fontSize: 20,
+    welcomeText: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.8)',
+    },
+    headerTitle: {
+        fontSize: 26,
         fontWeight: 'bold',
         color: COLORS.white,
+    },
+    deptBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 20,
+        alignSelf: 'flex-start',
+        marginTop: 8,
+        gap: 6,
+    },
+    deptText: {
+        fontSize: 12,
+        color: COLORS.white,
+        fontWeight: '600',
+    },
+    iconButton: {
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        padding: 8,
+        borderRadius: 20,
+    },
+    statsCard: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        backgroundColor: COLORS.white,
+        borderRadius: 20,
+        padding: 20,
+        marginTop: 10,
+        ...SHADOWS.small,
+    },
+    statItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        flex: 1,
+    },
+    statIconContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    statNumber: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: COLORS.text,
     },
     statLabel: {
         fontSize: 12,
-        color: 'rgba(255,255,255,0.9)',
-        marginTop: 4,
+        color: COLORS.textLight,
+        fontWeight: '500',
     },
-    dividerVertical: {
+    statDivider: {
         width: 1,
-        backgroundColor: 'rgba(255,255,255,0.3)',
+        height: 30,
+        backgroundColor: '#f0f0f0',
+        marginHorizontal: 10,
     },
     list: {
         padding: 20,
-        paddingTop: 10,
         paddingBottom: 100,
     },
     card: {
         backgroundColor: COLORS.white,
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 16,
-        borderLeftWidth: 4,
-        borderLeftColor: COLORS.primary,
+        borderRadius: 24,
+        padding: 20,
+        marginBottom: 20,
     },
     cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: 15,
     },
-    cardTitle: {
-        fontSize: 16,
+    categoryTag: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.primary + '10',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 10,
+        gap: 6,
+    },
+    categoryTagText: {
+        fontSize: 12,
+        color: COLORS.primary,
         fontWeight: 'bold',
-        color: COLORS.text,
-        flex: 1,
     },
-    priorityBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
+    statusBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 10,
     },
-    priorityText: {
+    statusText: {
         color: COLORS.white,
         fontSize: 10,
         fontWeight: 'bold',
-        textTransform: 'uppercase',
+    },
+    cardTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: COLORS.text,
+        marginBottom: 15,
     },
     cardBody: {
-        padding: 15,
-        paddingTop: 0,
-        paddingBottom: 15,
+        marginBottom: 20,
     },
     infoRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
-        marginBottom: 8,
+        marginBottom: 10,
     },
     infoText: {
-        color: COLORS.text,
         fontSize: 14,
+        color: COLORS.textLight,
+        flex: 1,
     },
     cardFooter: {
         flexDirection: 'row',
-        padding: 15,
-        borderTopWidth: 1,
-        borderTopColor: '#f0f0f0',
-        gap: 10,
+        gap: 12,
     },
-    routeButton: {
-        flex: 1.2,
-        backgroundColor: COLORS.primary,
+    navigateBtn: {
+        flex: 1.5,
+        borderRadius: 15,
+        overflow: 'hidden',
+    },
+    btnGradient: {
         flexDirection: 'row',
-        justifyContent: 'center',
         alignItems: 'center',
+        justifyContent: 'center',
         paddingVertical: 12,
-        borderRadius: 12,
         gap: 8,
     },
-    statusButton: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: 12,
-    },
-    statusButtonText: {
+    btnText: {
         color: COLORS.white,
         fontWeight: 'bold',
         fontSize: 14,
     },
-    routeButtonText: {
+    actionBtn: {
+        flex: 1,
+        borderRadius: 15,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 12,
+    },
+    actionBtnText: {
         color: COLORS.white,
         fontWeight: 'bold',
         fontSize: 14,

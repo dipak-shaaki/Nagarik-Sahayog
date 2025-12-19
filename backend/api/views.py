@@ -236,6 +236,13 @@ class StaffListView(generics.ListAPIView):
             return User.objects.filter(role__in=['DEPT_ADMIN', 'FIELD_OFFICIAL'])
         return User.objects.filter(role='FIELD_OFFICIAL', department=user.department)
 
+class UserListView(generics.ListAPIView):
+    serializer_class = UserSerializer
+    permission_classes = (IsSuperAdmin,)
+
+    def get_queryset(self):
+        return User.objects.all().order_by('-date_joined')
+
 class UpdateReportStatusView(APIView):
     permission_classes = (IsOfficial | IsDeptAdmin | IsSuperAdmin,)
 

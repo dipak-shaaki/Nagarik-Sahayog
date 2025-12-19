@@ -7,7 +7,7 @@ from rest_framework_simplejwt.views import (
 from .views import (
     RegisterView, CreateStaffView, StaffListView, UserMeView, DepartmentListView, 
     ReportViewSet, NotificationViewSet, AssignReportView, UpdateReportStatusView,
-    AcceptReportView, DeclineReportView, CommunityFeedView
+    AcceptReportView, DeclineReportView, CommunityFeedView, UserListView
 )
 
 router = DefaultRouter()
@@ -19,6 +19,7 @@ urlpatterns = [
     path('auth/register/', RegisterView.as_view(), name='register'),
     path('auth/staff/create/', CreateStaffView.as_view(), name='staff_create'),
     path('auth/staff/', StaffListView.as_view(), name='staff_list'),
+    path('auth/users/', UserListView.as_view(), name='user_list'),
     path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/me/', UserMeView.as_view(), name='user_me'),
