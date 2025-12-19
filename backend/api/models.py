@@ -92,8 +92,8 @@ class EmergencyRequest(models.Model):
 
 class FieldOfficialLocation(models.Model):
     official = models.OneToOneField(User, on_delete=models.CASCADE, related_name='current_location')
-    latitude = models.FloatField()
-    longitude = models.FloatField()
+    latitude = models.FloatField(default=27.7172)
+    longitude = models.FloatField(default=85.3240)
     is_available = models.BooleanField(default=True)
     last_updated = models.DateTimeField(auto_now=True)
 

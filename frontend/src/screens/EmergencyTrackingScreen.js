@@ -2,7 +2,7 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Dimensions, Image, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE, AnimatedRegion } from 'react-native-maps';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ScreenWrapper from '../components/ScreenWrapper';
 import { COLORS, SHADOWS } from '../constants/theme';
@@ -26,6 +26,17 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
     const mapRef = useRef(null);
     const locationSubscription = useRef(null);
     const simulationInterval = useRef(null);
+    const hasUnitLocation = useRef(false);
+
+    // Animated region for smooth movement
+    const unitAnimatedRegion = useRef(new AnimatedRegion({
+        latitude: 27.7172,
+        longitude: 85.3240,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+    })).current;
+
+    const [unitBearing, setUnitBearing] = useState(0);
 
     useEffect(() => {
         initializeTracking();
@@ -140,20 +151,42 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
             });
             const data = await response.json();
             if (response.ok) {
-                setUnitLocation({
+                const newLoc = {
                     latitude: data.latitude,
                     longitude: data.longitude
-                });
+                };
+
+                // Update state for Polyline/Distance
+                setUnitLocation(newLoc);
+
+                // Smooth Animation
+                if (hasUnitLocation.current) {
+                    unitAnimatedRegion.timing({
+                        latitude: newLoc.latitude,
+                        longitude: newLoc.longitude,
+                        duration: 3000,
+                        useNativeDriver: false,
+                    }).start();
+                } else {
+                    unitAnimatedRegion.setValue({ ...newLoc, latitudeDelta: 0.005, longitudeDelta: 0.005 });
+                    hasUnitLocation.current = true;
+                }
+
+                if (data.bearing !== undefined) {
+                    setUnitBearing(data.bearing);
+                }
+
                 if (data.status !== status) {
                     setStatus(data.status);
-                    fetchEmergencyDetails(); // Refresh full details on status change
+                    fetchEmergencyDetails();
                 }
                 if (userLocation) {
-                    calculateDistanceAndETA({ latitude: data.latitude, longitude: data.longitude }, userLocation);
+                    calculateDistanceAndETA(newLoc, userLocation);
                 }
             }
         } catch (error) {
             console.error('Simulate error:', error);
+            Alert.alert('Simulation Error', error.message);
         }
     };
 
@@ -168,11 +201,24 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
                 vehicle_number: 'BA 2 JHA 1234'
             });
         }
+
         if (data.unit_location) {
             const loc = {
                 latitude: data.unit_location.latitude,
                 longitude: data.unit_location.longitude
             };
+
+            // If this is the initial load or first time seeing unit, set value immediately
+            if (!hasUnitLocation.current) {
+                unitAnimatedRegion.setValue({
+                    latitude: loc.latitude,
+                    longitude: loc.longitude,
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005
+                });
+                hasUnitLocation.current = true;
+            }
+
             setUnitLocation(loc);
             if (userLocation) calculateDistanceAndETA(loc, userLocation);
         }
@@ -245,7 +291,12 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
                     )}
 
                     {unitLocation && (
-                        <Marker coordinate={unitLocation} title="Emergency Unit">
+                        <Marker.Animated
+                            coordinate={unitAnimatedRegion}
+                            title="Emergency Unit"
+                            anchor={{ x: 0.5, y: 0.5 }}
+                            style={{ transform: [{ rotate: `${unitBearing}deg` }] }}
+                        >
                             <View style={styles.unitMarker}>
                                 <MaterialIcons
                                     name={serviceName === 'Police' ? 'local-police' : serviceName === 'Fire' ? 'fire-truck' : 'medical-services'}
@@ -253,7 +304,7 @@ const EmergencyTrackingScreen = ({ route, navigation }) => {
                                     color={COLORS.white}
                                 />
                             </View>
-                        </Marker>
+                        </Marker.Animated>
                     )}
 
                     {userLocation && unitLocation && (

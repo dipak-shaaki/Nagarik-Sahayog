@@ -176,6 +176,7 @@ class EmergencyRequestViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         # 1. Save the request
         emergency = serializer.save(citizen=self.request.user)
+        print(f"DEBUG: Emergency created: {emergency.id}, Service: {emergency.service_type}")
         
         # 2. Find nearest available official
         service_type = emergency.service_type
@@ -186,12 +187,19 @@ class EmergencyRequestViewSet(viewsets.ModelViewSet):
             'POLICE': 'Police'
         }
         target_dept_name = dept_name_map.get(service_type)
+        print(f"DEBUG: Target Dept: {target_dept_name}")
         
         # Find officials in that department who are available
         officials = User.objects.filter(
             role='FIELD_OFFICIAL',
             department__name__icontains=target_dept_name or service_type
         )
+        print(f"DEBUG: Found {officials.count()} officials in department")
+
+        # Fallback: If no officials found in specific department, try finding ANY field official (for demo purposes)
+        if officials.count() == 0:
+            print("DEBUG: No officials in dept, trying wildcard search")
+            officials = User.objects.filter(role='FIELD_OFFICIAL')
 
         nearest_official = None
         min_dist = float('inf')
@@ -203,18 +211,28 @@ class EmergencyRequestViewSet(viewsets.ModelViewSet):
                 defaults={'latitude': 27.7172, 'longitude': 85.3240}
             )
             
+            # For demo: Ignore availability check if we are desperate? 
+            # Better: just log it.
             if not loc.is_available:
+                print(f"DEBUG: Official {official.id} is busy")
+                # For demo purposes, let's steal them if we have no one else? 
+                # No, stick to logic, but maybe we need to reset them manually.
                 continue
 
-            dist = self.calculate_distance(
-                emergency.latitude, emergency.longitude,
-                loc.latitude, loc.longitude
-            )
-            if dist < min_dist:
-                min_dist = dist
-                nearest_official = official
+            try:
+                dist = self.calculate_distance(
+                    emergency.latitude, emergency.longitude,
+                    loc.latitude, loc.longitude
+                )
+                print(f"DEBUG: Official {official.id} dist: {dist}")
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest_official = official
+            except Exception as e:
+                print(f"DEBUG: Calc distance error: {e}")
 
         if nearest_official:
+            print(f"DEBUG: Assigning official {nearest_official.id}")
             emergency.assigned_official = nearest_official
             emergency.status = 'DISPATCHED'
             # Mark official as unavailable
@@ -222,6 +240,8 @@ class EmergencyRequestViewSet(viewsets.ModelViewSet):
             loc.is_available = False
             loc.save()
             emergency.save()
+        else:
+            print("DEBUG: No nearest official found to assign.")
 
     def calculate_distance(self, lat1, lon1, lat2, lon2):
         R = 6371 # Earth radius in km
@@ -230,7 +250,7 @@ class EmergencyRequestViewSet(viewsets.ModelViewSet):
         a = math.sin(dlat / 2) * math.sin(dlat / 2) + \
             math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * \
             math.sin(dlon / 2) * math.sin(dlon / 2)
-        c = 2 * math.atan2(math.sqrt(a), Math.sqrt(1 - a))
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
         return R * c
 
 class UpdateLocationView(APIView):
@@ -257,6 +277,12 @@ class SimulateMovementView(APIView):
             
             official_loc, _ = FieldOfficialLocation.objects.get_or_create(official=emergency.assigned_official)
             
+            # Teleport if too far (> ~10km) to ensure simulation is visible
+            dist_sq = (emergency.latitude - official_loc.latitude)**2 + (emergency.longitude - official_loc.longitude)**2
+            if dist_sq > 0.01:
+                official_loc.latitude = emergency.latitude - 0.005
+                official_loc.longitude = emergency.longitude - 0.005
+
             # Move 10% closer to the destination
             step = 0.1
             official_loc.latitude += (emergency.latitude - official_loc.latitude) * step
@@ -271,12 +297,31 @@ class SimulateMovementView(APIView):
                 emergency.status = 'EN_ROUTE'
                 emergency.save()
                 
+            # Calculate bearing before saving
+            bearing = self.calculate_bearing(
+                official_loc.latitude, official_loc.longitude,
+                emergency.latitude, emergency.longitude
+            )
+
             official_loc.save()
             
             return Response({
                 'latitude': official_loc.latitude,
                 'longitude': official_loc.longitude,
-                'status': emergency.status
+                'status': emergency.status,
+                'bearing': bearing
             })
         except EmergencyRequest.DoesNotExist:
             return Response({'error': 'Not found'}, status=404)
+
+    def calculate_bearing(self, lat1, lon1, lat2, lon2):
+        dLon = math.radians(lon2 - lon1)
+        lat1 = math.radians(lat1)
+        lat2 = math.radians(lat2)
+        
+        y = math.sin(dLon) * math.cos(lat2)
+        x = math.cos(lat1) * math.sin(lat2) - \
+            math.sin(lat1) * math.cos(lat2) * math.cos(dLon)
+            
+        bearing = math.degrees(math.atan2(y, x))
+        return (bearing + 360) % 360
