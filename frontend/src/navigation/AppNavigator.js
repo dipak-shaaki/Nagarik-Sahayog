@@ -36,7 +36,7 @@ const AppNavigator = () => {
     }
 
     return (
-        <NavigationContainer>
+        <NavigationContainer key={user ? 'authenticated' : 'guest'}>
             {renderNavigator()}
         </NavigationContainer>
     );

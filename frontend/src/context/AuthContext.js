@@ -94,12 +94,23 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = async () => {
-        await AsyncStorage.removeItem('userToken');
-        setUser(null);
+        setIsLoading(true);
+        try {
+            await AsyncStorage.removeItem('userToken');
+            setUser(null);
+        } catch (e) {
+            console.error('Logout error', e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const refreshUser = async () => {
+        await checkLoginStatus();
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+        <AuthContext.Provider value={{ user, login, register, logout, refreshUser, isLoading }}>
             {children}
         </AuthContext.Provider>
     );

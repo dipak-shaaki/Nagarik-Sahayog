@@ -2,6 +2,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import FieldOfficialDashboardScreen from '../screens/FieldOfficialDashboardScreen';
 import MapScreen from '../screens/MapScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import AlertsScreen from '../screens/AlertsScreen';
 
 const Stack = createStackNavigator();
 
@@ -19,12 +20,17 @@ const OfficialNavigator = () => {
             <Stack.Screen
                 name="MapScreen"
                 component={MapScreen}
-                options={{ title: 'Navigate' }}
+                options={{ headerShown: false }}
             />
             <Stack.Screen
                 name="Profile"
                 component={ProfileScreen}
                 options={{ title: 'My Profile' }}
+            />
+            <Stack.Screen
+                name="Alerts"
+                component={AlertsScreen}
+                options={{ title: 'Notifications' }}
             />
         </Stack.Navigator>
     );

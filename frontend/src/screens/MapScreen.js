@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Dimensions, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import PlatformMapView from '../components/PlatformMapView';
 import ScreenWrapper from '../components/ScreenWrapper';
@@ -15,7 +15,15 @@ const LATITUDE_DELTA = 0.0922;
 const LONGITUDE_DELTA = LATITUDE_DELTA * ASPECT_RATIO;
 
 const MapScreen = ({ route, navigation }) => {
-    const { problemLocation, adminLocation, selectionMode, initialLocation } = route.params || {};
+    const { problemLocation, adminLocation, selectionMode, initialLocation, from } = route.params || {};
+
+    console.log('=== MapScreen Loaded ===');
+    console.log('problemLocation:', problemLocation);
+    console.log('adminLocation:', adminLocation);
+    console.log('from:', from);
+    console.log('selectionMode:', selectionMode);
+
+    const mapRef = useRef(null);
 
     const [region, setRegion] = useState({
         latitude: problemLocation?.latitude || initialLocation?.latitude || 27.7172,
@@ -42,6 +50,8 @@ const MapScreen = ({ route, navigation }) => {
         status: problemLocation?.status,
     };
 
+    console.log('currentProblemLocation:', currentProblemLocation);
+
     // Helper function to get map markers
     const getMapMarkers = () => {
         const markers = [
@@ -52,12 +62,17 @@ const MapScreen = ({ route, navigation }) => {
                 },
                 title: currentProblemLocation.title,
                 description: "Issue Location",
-                pinColor: COLORS.danger
+                pinColor: COLORS.danger,
+                icon: 'alert-circle', // Problem location icon
+                isOfficial: false
             }
         ];
 
         const myLoc = userLocation || adminLocation || { latitude: 27.7221, longitude: 85.3123 };
         const isOffice = !userLocation && adminLocation;
+
+        console.log('Official/User Location:', myLoc, 'isOffice:', isOffice);
+
         markers.push({
             coordinate: {
                 latitude: myLoc.latitude,
@@ -65,55 +80,132 @@ const MapScreen = ({ route, navigation }) => {
             },
             title: isOffice ? "Department Office" : "Your Location",
             description: isOffice ? "Starting Point" : "You are here",
-            pinColor: COLORS.primary
+            pinColor: COLORS.primary,
+            icon: isOffice ? 'business' : 'navigate', // Official/office location icon
+            isOfficial: true
         });
 
+        console.log('Total markers:', markers.length);
         return markers;
     };
 
     // Helper function to get map polylines
     const getMapPolylines = () => {
-        return availableRoutes.map((route, index) => ({
+        const polylines = availableRoutes.map((route, index) => ({
             coordinates: route.coordinates,
             strokeColor: index === selectedRouteIndex ? COLORS.primary : '#95a5a6',
             strokeWidth: index === selectedRouteIndex ? 6 : 4,
             lineDashPattern: index === selectedRouteIndex ? [] : [5, 5],
             zIndex: index === selectedRouteIndex ? 10 : index,
         }));
+
+        console.log('Polylines count:', polylines.length);
+        if (polylines.length > 0) {
+            console.log('First polyline coordinates count:', polylines[0].coordinates.length);
+        }
+
+        return polylines;
     };
 
 
 
     const calculateRoute = async (type = 'fastest', startCoords = null) => {
         const start = startCoords || userLocation || adminLocation || { latitude: 27.7221, longitude: 85.3123 };
-        if (!start || !currentProblemLocation) return;
+
+        console.log('========== CALCULATING ROUTE ==========');
+        console.log('Start coordinates:', start);
+        console.log('End coordinates (problem):', currentProblemLocation);
+
+        if (!start || !currentProblemLocation) {
+            console.error('Missing coordinates! Start:', start, 'Problem:', currentProblemLocation);
+            alert('Error: Missing location coordinates');
+            return;
+        }
+
+        // Validate coordinates
+        if (!start.latitude || !start.longitude || !currentProblemLocation.latitude || !currentProblemLocation.longitude) {
+            console.error('Invalid coordinates!');
+            alert('Error: Invalid location coordinates');
+            return;
+        }
 
         setLoading(true);
         try {
             const startStr = `${start.longitude},${start.latitude}`;
             const endStr = `${currentProblemLocation.longitude},${currentProblemLocation.latitude}`;
 
-            const url = `http://router.project-osrm.org/route/v1/driving/${startStr};${endStr}?overview=full&geometries=geojson&alternatives=true`;
+            console.log('Start string:', startStr);
+            console.log('End string:', endStr);
+
+            // Improved OSRM request with better parameters for complete routes
+            const url = `http://router.project-osrm.org/route/v1/driving/${startStr};${endStr}?overview=full&geometries=geojson&alternatives=true&steps=true&annotations=true`;
+
+            console.log('OSRM URL:', url);
+            console.log('Fetching route...');
+
             const response = await fetch(url);
             const data = await response.json();
 
-            if (data.code === 'Ok' && data.routes.length > 0) {
-                const formattedRoutes = data.routes.map((r, idx) => ({
-                    id: idx,
-                    coordinates: r.geometry.coordinates.map(c => ({
-                        latitude: c[1],
-                        longitude: c[0]
-                    })),
-                    distance: r.distance,
-                    duration: r.duration,
-                    title: idx === 0 ? "Fastest" : `Option ${idx + 1}`
-                }));
+            console.log('OSRM Response Code:', data.code);
+            console.log('OSRM Full Response:', JSON.stringify(data, null, 2));
+
+            if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                console.log('Routes found:', data.routes.length);
+
+                const formattedRoutes = data.routes.map((r, idx) => {
+                    // Start with the exact start coordinate
+                    const coords = [
+                        { latitude: Number(start.latitude), longitude: Number(start.longitude) },
+                        ...r.geometry.coordinates.map(c => ({
+                            latitude: Number(c[1]),
+                            longitude: Number(c[0])
+                        })),
+                        // End with the exact destination coordinate
+                        {
+                            latitude: Number(currentProblemLocation.latitude),
+                            longitude: Number(currentProblemLocation.longitude)
+                        }
+                    ];
+
+                    // Filter out any invalid coordinates (NaN or null) that break rendering
+                    const validCoords = coords.filter(c =>
+                        !isNaN(c.latitude) &&
+                        !isNaN(c.longitude) &&
+                        c.latitude !== null &&
+                        c.longitude !== null
+                    );
+
+                    console.log(`Route ${idx}:`, {
+                        points: validCoords.length, // Log valid count
+                        distance: r.distance,
+                        duration: r.duration,
+                    });
+
+                    return {
+                        id: idx,
+                        coordinates: validCoords,
+                        distance: r.distance,
+                        duration: r.duration,
+                        title: idx === 0 ? "Fastest" : `Option ${idx + 1}`
+                    };
+                });
+
+                console.log('Formatted routes:', formattedRoutes.length);
+                console.log('Setting routes to state...');
                 setAvailableRoutes(formattedRoutes);
+                console.log('Routes set successfully!');
+            } else {
+                console.error('OSRM Error - Code:', data.code);
+                console.error('OSRM Error - Message:', data.message);
+                alert(`Route calculation failed: ${data.message || data.code || 'Unknown error'}`);
             }
         } catch (error) {
             console.error('Error calculating route:', error);
+            console.error('Error stack:', error.stack);
+            alert(`Failed to calculate route: ${error.message}`);
         } finally {
             setLoading(false);
+            console.log('Route calculation finished');
         }
     };
 
@@ -182,6 +274,29 @@ const MapScreen = ({ route, navigation }) => {
         };
     }, []);
 
+    // Adjust map region when routes are calculated to show complete route
+    // Adjust map region using fitToCoordinates for reliable route visibility
+    useEffect(() => {
+        if (availableRoutes.length > 0 && selectedRouteIndex < availableRoutes.length) {
+            const selectedRoute = availableRoutes[selectedRouteIndex];
+
+            if (selectedRoute.coordinates.length > 0 && mapRef.current) {
+                console.log('Using fitToCoordinates to show complete route');
+                try {
+                    // Small delay to ensure map layout is complete
+                    setTimeout(() => {
+                        mapRef.current?.fitToCoordinates(selectedRoute.coordinates, {
+                            edgePadding: { top: 100, right: 50, bottom: 100, left: 50 },
+                            animated: true,
+                        });
+                    }, 500);
+                } catch (error) {
+                    console.log('Error fitting to coordinates:', error);
+                }
+            }
+        }
+    }, [availableRoutes, selectedRouteIndex]);
+
     // Dynamically update route if user moves, BUT ONLY if we are NOT in Admin/Office mode
     useEffect(() => {
         if (userLocation && !selectionMode && problemLocation?.id && !adminLocation) {
@@ -246,7 +361,18 @@ const MapScreen = ({ route, navigation }) => {
             <View style={styles.container}>
                 <View style={styles.header}>
                     <TouchableOpacity
-                        onPress={() => navigation.goBack()}
+                        onPress={() => {
+                            console.log('Back button clicked, from:', from);
+                            // Directly navigate to the source screen
+                            if (from === 'FieldOfficialDashboard') {
+                                navigation.navigate('FieldOfficialDashboard');
+                            } else if (from === 'AdminDashboard') {
+                                navigation.navigate('AdminDashboard');
+                            } else {
+                                // Default fallback
+                                navigation.navigate('AdminDashboard');
+                            }
+                        }}
                         style={styles.backButton}
                     >
                         <Ionicons name="arrow-back" size={24} color={COLORS.text} />
@@ -256,6 +382,7 @@ const MapScreen = ({ route, navigation }) => {
 
                 <View style={styles.mapContainer}>
                     <PlatformMapView
+                        ref={mapRef}
                         style={styles.map}
                         region={region}
                         onRegionChangeComplete={handleRegionChange}
