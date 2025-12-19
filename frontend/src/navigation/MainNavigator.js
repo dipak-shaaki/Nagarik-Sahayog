@@ -1,0 +1,30 @@
+import { createStackNavigator } from '@react-navigation/stack';
+import ReportScreen from '../screens/ReportScreen';
+import TabNavigator from './TabNavigator';
+
+import EmergencyTrackingScreen from '../screens/EmergencyTrackingScreen';
+import MapScreen from '../screens/MapScreen';
+import ServiceDetailScreen from '../screens/ServiceDetailScreen';
+
+import AdminDashboardScreen from '../screens/AdminDashboardScreen';
+
+const Stack = createStackNavigator();
+
+const MainNavigator = () => {
+    return (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="MainTabs" component={TabNavigator} />
+            <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+            <Stack.Screen
+                name="CreateReport"
+                component={ReportScreen}
+                options={{ presentation: 'modal' }}
+            />
+            <Stack.Screen name="ServiceDetail" component={ServiceDetailScreen} />
+            <Stack.Screen name="EmergencyTracking" component={EmergencyTrackingScreen} />
+            <Stack.Screen name="MapScreen" component={MapScreen} />
+        </Stack.Navigator>
+    );
+};
+
+export default MainNavigator;
