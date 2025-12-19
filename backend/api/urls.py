@@ -6,12 +6,13 @@ from rest_framework_simplejwt.views import (
 )
 from .views import (
     RegisterView, CreateStaffView, StaffListView, UserMeView, DepartmentListView, 
-    ReportViewSet, AssignReportView, UpdateReportStatusView,
-    AcceptReportView, DeclineReportView
+    ReportViewSet, NotificationViewSet, AssignReportView, UpdateReportStatusView,
+    AcceptReportView, DeclineReportView, CommunityFeedView
 )
 
 router = DefaultRouter()
 router.register(r'reports', ReportViewSet, basename='report')
+router.register(r'notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
     # Auth
@@ -30,6 +31,7 @@ urlpatterns = [
     path('reports/<int:pk>/status/', UpdateReportStatusView.as_view(), name='report_status'),
     path('reports/<int:pk>/accept/', AcceptReportView.as_view(), name='report_accept'),
     path('reports/<int:pk>/decline/', DeclineReportView.as_view(), name='report_decline'),
+    path('community-feed/', CommunityFeedView.as_view(), name='community_feed'),
     
     # ViewSets
     path('', include(router.urls)),

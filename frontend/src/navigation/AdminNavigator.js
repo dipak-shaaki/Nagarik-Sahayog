@@ -4,6 +4,8 @@ import CreateStaffScreen from '../screens/CreateStaffScreen';
 import MapScreen from '../screens/MapScreen';
 import ProfileScreen from '../screens/ProfileScreen'; // Shared profile screen
 
+import AlertsScreen from '../screens/AlertsScreen';
+
 const Stack = createStackNavigator();
 
 const AdminNavigator = () => {
@@ -20,7 +22,7 @@ const AdminNavigator = () => {
             <Stack.Screen
                 name="MapScreen"
                 component={MapScreen}
-                options={{ title: 'Map View' }}
+                options={{ headerShown: false }}
             />
             <Stack.Screen
                 name="CreateStaff"
@@ -31,6 +33,11 @@ const AdminNavigator = () => {
                 name="Profile"
                 component={ProfileScreen}
                 options={{ title: 'My Profile' }}
+            />
+            <Stack.Screen
+                name="Alerts"
+                component={AlertsScreen}
+                options={{ title: 'Notifications' }}
             />
         </Stack.Navigator>
     );

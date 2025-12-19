@@ -1,23 +1,24 @@
 import { Platform } from 'react-native';
 
 export const COLORS = {
-    primary: '#4A90E2', // Bright Blue
-    secondary: '#50E3C2', // Teal
-    accent: '#FF5A5F', // Red for emergency
-    background: '#F5F7FA', // Light Gray
+    primary: '#2A80B9', // Sophisticated Blue
+    secondary: '#1ABC9C', // Teal
+    accent: '#E74C3C', // Red
+    background: '#F0F3F6', // Very Light Blue-Gray for depth
     surface: '#FFFFFF',
-    text: '#333333',
+    text: '#2C3E50', // Midnight Blue
     textLight: '#7F8C8D',
     white: '#FFFFFF',
     black: '#000000',
-    success: '#2ECC71',
-    warning: '#F1C40F',
-    danger: '#E74C3C',
-    darkOverlay: 'rgba(0, 0, 0, 0.6)',
-    glass: 'rgba(255, 255, 255, 0.8)',
-    glassBorder: 'rgba(255, 255, 255, 0.2)',
-    gradientStart: '#1A2980',
-    gradientEnd: '#26D0CE',
+    success: '#27AE60',
+    warning: '#F39C12',
+    danger: '#C0392B',
+    darkOverlay: 'rgba(44, 62, 80, 0.7)',
+    glass: 'rgba(255, 255, 255, 0.9)',
+    glassBorder: 'rgba(255, 255, 255, 0.5)',
+    gradientStart: '#2980B9',
+    gradientEnd: '#6DD5FA',
+    cardBorder: 'rgba(0,0,0,0.05)',
 };
 
 export const FONTS = {
@@ -33,45 +34,45 @@ const shadowToBox = (s) => ({
 export const SHADOWS = Platform.select({
     web: {
         small: shadowToBox({
-            shadowColor: '#000',
+            shadowColor: '#2C3E50',
             shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 4,
+            shadowOpacity: 0.05,
+            shadowRadius: 6,
         }),
         medium: shadowToBox({
-            shadowColor: '#000',
+            shadowColor: '#2C3E50',
             shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.15,
-            shadowRadius: 8,
+            shadowOpacity: 0.1,
+            shadowRadius: 12,
         }),
         large: shadowToBox({
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: 0.2,
-            shadowRadius: 16,
+            shadowColor: '#2C3E50',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.15,
+            shadowRadius: 24,
         }),
     },
     default: {
         small: {
-            shadowColor: '#000',
+            shadowColor: '#2C3E50',
             shadowOffset: { width: 0, height: 2 },
             shadowOpacity: 0.1,
             shadowRadius: 4,
-            elevation: 2,
+            elevation: 3,
         },
         medium: {
-            shadowColor: '#000',
+            shadowColor: '#2C3E50',
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.15,
             shadowRadius: 8,
-            elevation: 5,
+            elevation: 6,
         },
         large: {
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 10 },
+            shadowColor: '#2C3E50',
+            shadowOffset: { width: 0, height: 8 },
             shadowOpacity: 0.2,
             shadowRadius: 16,
-            elevation: 10,
+            elevation: 12,
         },
     }
 });

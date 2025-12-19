@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import ScreenWrapper from '../components/ScreenWrapper';
 import { COLORS, SHADOWS } from '../constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
@@ -14,6 +15,7 @@ const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10
 
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback } from 'react';
+import MapRenderer from '../components/MapRenderer'; // Assuming this import was missing in snippet but present in file
 
 const AdminDashboardScreen = ({ navigation }) => {
     const { logout, user } = useAuth();
@@ -36,8 +38,10 @@ const AdminDashboardScreen = ({ navigation }) => {
     useFocusEffect(
         useCallback(() => {
             fetchReports();
-            fetchStaff();
-        }, [])
+            if (user?.role === 'SUPER_ADMIN' || user?.role === 'DEPT_ADMIN') {
+                fetchStaff();
+            }
+        }, [user])
     );
 
     const fetchReports = async () => {
@@ -109,20 +113,30 @@ const AdminDashboardScreen = ({ navigation }) => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
+                            if (!selectedReport?.id) {
+                                Alert.alert('Error', 'Invalid Report ID');
+                                return;
+                            }
                             const token = await AsyncStorage.getItem('userToken');
+                            console.log('Attempting to delete report:', selectedReport.id);
+
                             const response = await fetch(`${API_URL}/reports/${selectedReport.id}/`, {
                                 method: 'DELETE',
                                 headers: { 'Authorization': `Bearer ${token}` }
                             });
 
                             if (response.ok) {
+                                console.log('Delete successful');
                                 Alert.alert('Success', 'Report deleted successfully');
                                 setShowDetailModal(false);
                                 fetchReports();
                             } else {
-                                Alert.alert('Error', 'Failed to delete report');
+                                const errorText = await response.text();
+                                console.error('Delete failed:', response.status, errorText);
+                                Alert.alert('Error', `Failed to delete report: ${response.status}`);
                             }
                         } catch (error) {
+                            console.error('Delete connection error:', error);
                             Alert.alert('Error', 'Connection error');
                         }
                     }
@@ -134,8 +148,10 @@ const AdminDashboardScreen = ({ navigation }) => {
     const getStatusColor = (status) => {
         switch (status) {
             case 'PENDING': return COLORS.danger;
-            case 'ASSIGNED': return COLORS.secondary;
-            case 'RESOLVED': return COLORS.primary;
+            case 'ASSIGNED': return COLORS.info || COLORS.primary;
+            case 'TEAM_ARRIVED': return COLORS.secondary || '#F39C12';
+            case 'IN_PROGRESS': return COLORS.primary;
+            case 'RESOLVED': return COLORS.success;
             default: return COLORS.textLight;
         }
     };
@@ -145,131 +161,133 @@ const AdminDashboardScreen = ({ navigation }) => {
         : reports.filter(r => r.status === filter);
 
     const renderItem = ({ item }) => {
-        // The original category lookup is no longer strictly needed if category_name is directly available
-        // const category = CATEGORIES.find(c => c.id === item.category); 
-
         return (
-            <View style={[styles.card, SHADOWS.small]}>
-                <Image source={{ uri: item.image || 'https://placehold.co/150' }} style={styles.cardImage} />
-                <View style={styles.cardContent}>
-                    <View style={styles.cardHeader}>
-                        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-                            <Text style={styles.statusText}>{item.status}</Text>
+            <TouchableOpacity
+                onPress={() => {
+                    setSelectedReport(item);
+                    setShowDetailModal(true);
+                }}
+                activeOpacity={0.9}
+            >
+                <View style={[styles.card, SHADOWS.medium]}>
+                    <Image source={{ uri: item.image || 'https://placehold.co/150' }} style={styles.cardImage} />
+                    <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.8)']}
+                        style={styles.cardGradientOverlay}
+                    />
+                    <View style={styles.cardContentOverlay}>
+                        <View style={styles.cardTopRow}>
+                            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+                                <Text style={styles.statusText}>{item.status}</Text>
+                            </View>
+                            <Text style={styles.dateTextOverlay}>{new Date(item.created_at).toLocaleDateString()}</Text>
                         </View>
-                        <Text style={styles.dateText}>{new Date(item.created_at).toLocaleDateString()}</Text>
-                    </View>
 
-                    <Text style={styles.title}>{item.title}</Text>
-                    <Text style={styles.address} numberOfLines={1}>
-                        <Ionicons name="location-outline" size={14} color={COLORS.textLight} /> {item.location_address || `${item.latitude?.toFixed(4)}, ${item.longitude?.toFixed(4)}`}
-                    </Text>
-
-                    <View style={styles.actionRow}>
-                        <View style={styles.categoryBadge}>
-                            <Ionicons name="alert-circle" size={14} color={COLORS.primary} />
-                            <Text style={[styles.categoryText, { color: COLORS.primary }]}>
-                                {item.category_name}
+                        <View>
+                            <Text style={styles.titleOverlay}>{item.title}</Text>
+                            <Text style={styles.addressOverlay} numberOfLines={1}>
+                                <Ionicons name="location" size={12} color={COLORS.white} /> {item.location_address || 'No address'}
                             </Text>
-                        </View>
-
-                        <View style={{ flexDirection: 'row', gap: 8 }}>
-                            {item.status === 'PENDING' && (
-                                <TouchableOpacity
-                                    style={[styles.actionButton, { backgroundColor: COLORS.secondary }]}
-                                    onPress={() => {
-                                        setSelectedReport(item);
-                                        setShowAssignModal(true);
-                                    }}
-                                >
-                                    <Text style={styles.actionButtonText}>Assign</Text>
-                                </TouchableOpacity>
-                            )}
-
-                            <TouchableOpacity
-                                style={styles.actionButton}
-                                onPress={() => navigation.navigate('MapScreen', {
-                                    problemLocation: {
-                                        id: item.id,
-                                        latitude: item.latitude,
-                                        longitude: item.longitude,
-                                        title: item.title,
-                                        status: item.status
-                                    },
-                                    adminLocation: {
-                                        latitude: item.office_latitude,
-                                        longitude: item.office_longitude
-                                    }
-                                })}
-                            >
-                                <Text style={styles.actionButtonText}>View</Text>
-                                <Ionicons name="arrow-forward" size={16} color={COLORS.white} />
-                            </TouchableOpacity>
                         </View>
                     </View>
                 </View>
-            </View>
+            </TouchableOpacity>
         );
     };
 
     return (
-        <ScreenWrapper>
+        <ScreenWrapper backgroundColor={COLORS.background}>
             <View style={styles.container}>
-                <View style={styles.header}>
-                    <Text style={styles.headerTitle}>
-                        {user?.role === 'SUPER_ADMIN' ? 'Super Admin Panel' : 'Department Dashboard'}
-                    </Text>
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
-                        <TouchableOpacity onPress={() => navigation.navigate('CreateStaff')}>
-                            <Ionicons name="person-add" size={24} color={COLORS.primary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.mapViewButton, isMapView && { backgroundColor: COLORS.primary }]}
-                            onPress={() => setIsMapView(!isMapView)}
-                        >
-                            <Ionicons name={isMapView ? "list" : "map"} size={22} color={isMapView ? COLORS.white : COLORS.primary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={logout} style={styles.mapViewButton}>
-                            <Ionicons name="log-out-outline" size={22} color={COLORS.danger} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-                <View style={styles.statsSummary}>
-                    <View style={[styles.statBox, { borderLeftColor: COLORS.danger }]}>
-                        <Text style={styles.statCount}>{reports.filter(r => r.status === 'PENDING').length}</Text>
-                        <Text style={styles.statLabel}>Pending</Text>
-                    </View>
-                    <View style={[styles.statBox, { borderLeftColor: COLORS.secondary }]}>
-                        <Text style={styles.statCount}>{reports.filter(r => r.status === 'ASSIGNED').length}</Text>
-                        <Text style={styles.statLabel}>Assigned</Text>
-                    </View>
-                    <View style={[styles.statBox, { borderLeftColor: COLORS.primary }]}>
-                        <Text style={styles.statCount}>{reports.filter(r => r.status === 'RESOLVED').length}</Text>
-                        <Text style={styles.statLabel}>Resolved</Text>
-                    </View>
+                <View style={styles.headerContainer}>
+                    <LinearGradient
+                        colors={[COLORS.gradientStart, COLORS.gradientEnd]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.headerGradient}
+                    >
+                        < View style={styles.headerContent}>
+                            <View>
+                                <Text style={styles.headerTitle}>
+                                    {user?.role === 'SUPER_ADMIN' ? 'Admin Control' : 'Department'}
+                                </Text>
+                                <Text style={styles.headerSubtitle}>
+                                    {user?.role === 'SUPER_ADMIN' ? 'Super Admin Dashboard' : 'Manage your department issues'}
+                                </Text>
+                            </View>
+
+                            <View style={styles.headerActions}>
+                                <TouchableOpacity onPress={() => navigation.navigate('CreateStaff')} style={styles.iconButton}>
+                                    <Ionicons name="person-add" size={22} color={COLORS.white} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.iconButton, isMapView && { backgroundColor: 'rgba(255,255,255,0.3)' }]}
+                                    onPress={() => setIsMapView(!isMapView)}
+                                >
+                                    <Ionicons name={isMapView ? "list" : "map"} size={22} color={COLORS.white} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.iconButton}
+                                    onPress={() => navigation.navigate('Alerts')}
+                                >
+                                    <Ionicons name="notifications-outline" size={26} color={COLORS.white} />
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={logout} style={styles.iconButton}>
+                                    <Ionicons name="log-out-outline" size={26} color={COLORS.white} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View style={styles.statsContainer}>
+                            <View style={styles.statCard}>
+                                <Text style={[styles.statCount, { color: COLORS.danger }]}>
+                                    {reports.filter(r => r.status === 'PENDING').length}
+                                </Text>
+                                <Text style={styles.statLabel}>Pending</Text>
+                            </View>
+                            <View style={styles.statCard}>
+                                <Text style={[styles.statCount, { color: COLORS.primary }]}>
+                                    {reports.filter(r => ['ASSIGNED', 'TEAM_ARRIVED', 'IN_PROGRESS'].includes(r.status)).length}
+                                </Text>
+                                <Text style={styles.statLabel}>Active</Text>
+                            </View>
+                            <View style={styles.statCard}>
+                                <Text style={[styles.statCount, { color: COLORS.success }]}>
+                                    {reports.filter(r => r.status === 'RESOLVED').length}
+                                </Text>
+                                <Text style={styles.statLabel}>Resolved</Text>
+                            </View>
+                        </View>
+                    </LinearGradient>
                 </View>
 
                 {/* Filter Bar */}
                 <View style={styles.filterContainer}>
-                    {['ALL', 'PENDING', 'ASSIGNED', 'RESOLVED'].map((f) => (
-                        <TouchableOpacity
-                            key={f}
-                            style={[styles.filterTab, filter === f && styles.activeFilterTab]}
-                            onPress={() => setFilter(f)}
-                        >
-                            <Text style={[styles.filterText, filter === f && styles.activeFilterText]}>
-                                {f}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+                        {['ALL', 'PENDING', 'ASSIGNED', 'TEAM_ARRIVED', 'IN_PROGRESS', 'RESOLVED'].map((f) => (
+                            <TouchableOpacity
+                                key={f}
+                                onPress={() => setFilter(f)}
+                            >
+                                <LinearGradient
+                                    colors={filter === f ? [COLORS.primary, COLORS.gradientEnd] : [COLORS.surface, COLORS.surface]}
+                                    style={[styles.filterTab, filter === f && styles.activeFilterTab]}
+                                >
+                                    <Text style={[styles.filterText, filter === f && styles.activeFilterText]}>
+                                        {f}
+                                    </Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
                 </View>
 
                 {loading ? (
                     <View style={styles.loadingContainer}>
                         <ActivityIndicator size="large" color={COLORS.primary} />
-                        <Text style={styles.loadingText}>Fetching latest reports...</Text>
+                        <Text style={styles.loadingText}>Updating Dashboard...</Text>
                     </View>
                 ) : isMapView ? (
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.mapContainer}>
                         <MapRenderer
                             style={{ flex: 1 }}
                             region={region}
@@ -286,19 +304,11 @@ const AdminDashboardScreen = ({ navigation }) => {
                 ) : (
                     <FlatList
                         data={filteredReports}
-                        renderItem={({ item }) => (
-                            <TouchableOpacity
-                                onPress={() => {
-                                    setSelectedReport(item);
-                                    setShowDetailModal(true);
-                                }}
-                            >
-                                {renderItem({ item })}
-                            </TouchableOpacity>
-                        )}
+                        renderItem={renderItem}
                         keyExtractor={item => item.id}
                         contentContainerStyle={styles.listContent}
                         showsVerticalScrollIndicator={false}
+                        style={{ flex: 1 }}
                     />
                 )}
 
@@ -306,15 +316,15 @@ const AdminDashboardScreen = ({ navigation }) => {
                 <Modal
                     visible={showDetailModal}
                     transparent
-                    animationType="slide"
+                    animationType="fade"
                     onRequestClose={() => setShowDetailModal(false)}
                 >
                     <View style={styles.modalOverlay}>
-                        <View style={styles.detailContainer}>
+                        <View style={[styles.detailContainer, SHADOWS.large]}>
                             <View style={styles.detailHeader}>
-                                <Text style={styles.detailTitle}>{selectedReport?.title}</Text>
-                                <TouchableOpacity onPress={() => setShowDetailModal(false)}>
-                                    <Ionicons name="close" size={24} color={COLORS.text} />
+                                <Text style={styles.detailTitle} numberOfLines={1}>{selectedReport?.title}</Text>
+                                <TouchableOpacity onPress={() => setShowDetailModal(false)} style={styles.closeButton}>
+                                    <Ionicons name="close" size={24} color={COLORS.textLight} />
                                 </TouchableOpacity>
                             </View>
 
@@ -327,46 +337,46 @@ const AdminDashboardScreen = ({ navigation }) => {
                                     />
                                 )}
 
-                                <View style={styles.detailInfo}>
-                                    <View style={styles.detailRow}>
-                                        <Ionicons name="time-outline" size={18} color={COLORS.primary} />
-                                        <Text style={styles.detailLabel}>Reported on:</Text>
-                                        <Text style={styles.detailValue}>{selectedReport ? new Date(selectedReport.created_at).toLocaleString() : ''}</Text>
+                                <View style={styles.detailBody}>
+                                    <View style={[styles.statusBadgeLarge, { backgroundColor: getStatusColor(selectedReport?.status) }]}>
+                                        <Text style={styles.statusTextLarge}>{selectedReport?.status}</Text>
                                     </View>
 
-                                    <View style={styles.detailRow}>
-                                        <Ionicons name="location-outline" size={18} color={COLORS.primary} />
-                                        <Text style={styles.detailLabel}>Address:</Text>
-                                        <Text style={styles.detailValue}>{selectedReport?.location_address || 'Address not available'}</Text>
+                                    <View style={styles.infoGrid}>
+                                        <View style={styles.infoItem}>
+                                            <Text style={styles.infoLabel}>Category</Text>
+                                            <Text style={styles.infoValue}>{selectedReport?.category_name}</Text>
+                                        </View>
+                                        <View style={styles.infoItem}>
+                                            <Text style={styles.infoLabel}>Reporter</Text>
+                                            <Text style={styles.infoValue}>{selectedReport?.citizen_name}</Text>
+                                        </View>
+                                        <View style={styles.infoItem}>
+                                            <Text style={styles.infoLabel}>Date</Text>
+                                            <Text style={styles.infoValue}>
+                                                {selectedReport ? new Date(selectedReport.created_at).toLocaleDateString() : ''}
+                                            </Text>
+                                        </View>
                                     </View>
 
-                                    <View style={styles.detailRow}>
-                                        <Ionicons name="person-outline" size={18} color={COLORS.primary} />
-                                        <Text style={styles.detailLabel}>Citizen:</Text>
-                                        <Text style={styles.detailValue}>{selectedReport?.citizen_name}</Text>
-                                    </View>
-
-                                    <View style={styles.divider} />
-
-                                    <Text style={styles.sectionLabel}>Description</Text>
+                                    <Text style={styles.sectionHeader}>Description</Text>
                                     <Text style={styles.descriptionText}>{selectedReport?.description}</Text>
+
+                                    <Text style={styles.sectionHeader}>Location</Text>
+                                    <Text style={styles.addressText}>{selectedReport?.location_address}</Text>
+
+                                    {selectedReport?.official_name && (
+                                        <View style={styles.assignedBox}>
+                                            <Ionicons name="shield-checkmark" size={20} color={COLORS.primary} />
+                                            <Text style={styles.assignedText}>Assigned: {selectedReport.official_name}</Text>
+                                        </View>
+                                    )}
                                 </View>
                             </ScrollView>
 
                             <View style={styles.detailActions}>
-                                {selectedReport?.status === 'PENDING' && (
-                                    <TouchableOpacity
-                                        style={[styles.modalButton, { backgroundColor: COLORS.secondary }]}
-                                        onPress={() => {
-                                            setShowDetailModal(false);
-                                            setShowAssignModal(true);
-                                        }}
-                                    >
-                                        <Text style={styles.modalButtonText}>Assign Official</Text>
-                                    </TouchableOpacity>
-                                )}
                                 <TouchableOpacity
-                                    style={styles.modalButton}
+                                    style={[styles.actionBtn, styles.primaryBtn]}
                                     onPress={() => {
                                         setShowDetailModal(false);
                                         navigation.navigate('MapScreen', {
@@ -381,17 +391,34 @@ const AdminDashboardScreen = ({ navigation }) => {
                                             adminLocation: {
                                                 latitude: selectedReport.office_latitude,
                                                 longitude: selectedReport.office_longitude
-                                            }
+                                            },
+                                            from: 'AdminDashboard'
                                         });
                                     }}
                                 >
-                                    <Text style={styles.modalButtonText}>View on Map</Text>
+                                    <Ionicons name="navigate-circle" size={24} color={COLORS.white} />
+                                    <Text style={styles.btnText}>Route</Text>
                                 </TouchableOpacity>
+
+                                {selectedReport?.status === 'PENDING' && (
+                                    <TouchableOpacity
+                                        style={[styles.actionBtn, styles.assignBtn]}
+                                        onPress={() => {
+                                            setShowDetailModal(false);
+                                            setShowAssignModal(true);
+                                        }}
+                                    >
+                                        <Ionicons name="person-add" size={20} color={COLORS.white} />
+                                        <Text style={styles.btnText}>Assign</Text>
+                                    </TouchableOpacity>
+                                )}
+
                                 <TouchableOpacity
-                                    style={[styles.modalButton, { backgroundColor: COLORS.danger }]}
+                                    style={[styles.actionBtn, styles.deleteBtn]}
                                     onPress={handleDeleteReport}
                                 >
-                                    <Text style={styles.modalButtonText}>Delete</Text>
+                                    <Ionicons name="trash" size={20} color={COLORS.white} />
+                                    <Text style={styles.btnText}>Delete</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -423,14 +450,17 @@ const AdminDashboardScreen = ({ navigation }) => {
                                         style={styles.staffItem}
                                         onPress={() => handleAssign(item.id)}
                                     >
-                                        <View>
-                                            <Text style={styles.staffName}>{item.first_name}</Text>
+                                        <View style={styles.staffAvatar}>
+                                            <Text style={styles.staffInitials}>{item.first_name[0]}</Text>
+                                        </View>
+                                        <View style={styles.staffInfo}>
+                                            <Text style={styles.staffName}>{item.first_name} {item.last_name}</Text>
                                             <Text style={styles.staffPhone}>{item.phone}</Text>
                                         </View>
-                                        <Ionicons name="add-circle" size={24} color={COLORS.primary} />
+                                        <Ionicons name="chevron-forward" size={20} color={COLORS.textLight} />
                                     </TouchableOpacity>
                                 )}
-                                ListEmptyComponent={<Text style={styles.emptyText}>No officials in your department</Text>}
+                                ListEmptyComponent={<Text style={styles.emptyText}>No officials found.</Text>}
                             />
                         </View>
                     </View>
@@ -445,178 +475,319 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: COLORS.background,
     },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
+    headerContainer: {
+        borderBottomLeftRadius: 30,
+        borderBottomRightRadius: 30,
+        overflow: 'hidden',
+        ...SHADOWS.medium,
+        marginBottom: 10,
+        backgroundColor: COLORS.white,
     },
-    loadingText: {
-        marginTop: 10,
-        fontSize: 16,
-        color: COLORS.textLight,
-        fontWeight: '500',
+    headerGradient: {
+        paddingTop: Platform.OS === 'ios' ? 60 : 40,
+        paddingHorizontal: 20,
+        paddingBottom: 25,
     },
-    header: {
+    headerContent: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 20,
-        backgroundColor: COLORS.white,
-        ...SHADOWS.small,
+        alignItems: 'flex-start',
+        marginBottom: 20,
     },
     headerTitle: {
-        fontSize: 22,
+        fontSize: 24,
         fontWeight: 'bold',
-        color: COLORS.text,
+        color: COLORS.white,
     },
-    mapViewButton: {
-        padding: 8,
-        backgroundColor: COLORS.surface,
-        borderRadius: 8,
+    headerSubtitle: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.8)',
+        marginTop: 4,
     },
-    statsSummary: {
+    headerActions: {
         flexDirection: 'row',
-        paddingHorizontal: 20,
-        paddingTop: 15,
-        gap: 12,
+        gap: 10,
     },
-    statBox: {
+    iconButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    statsContainer: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 10,
+    },
+    statCard: {
         flex: 1,
-        backgroundColor: COLORS.white,
+        backgroundColor: 'rgba(255,255,255,0.95)',
+        borderRadius: 16,
         padding: 12,
-        borderRadius: 12,
-        borderLeftWidth: 4,
+        alignItems: 'center',
         ...SHADOWS.small,
     },
     statCount: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: COLORS.text,
+        fontSize: 20,
+        fontWeight: '800',
     },
     statLabel: {
-        fontSize: 10,
+        fontSize: 11,
         color: COLORS.textLight,
-        textTransform: 'uppercase',
+        fontWeight: '600',
         marginTop: 2,
+        textTransform: 'uppercase',
     },
     filterContainer: {
-        flexDirection: 'row',
+        paddingTop: 10,
+        paddingBottom: 5,
+    },
+    filterScroll: {
         paddingHorizontal: 20,
-        paddingVertical: 15,
         gap: 10,
     },
     filterTab: {
-        paddingVertical: 6,
-        paddingHorizontal: 12,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
         borderRadius: 20,
-        backgroundColor: COLORS.surface,
-        borderWidth: 1,
-        borderColor: '#E0E0E0',
+        ...SHADOWS.small,
+        minWidth: 80,
+        alignItems: 'center',
     },
     activeFilterTab: {
-        backgroundColor: COLORS.primary,
-        borderColor: COLORS.primary,
+        // Handled by conditional gradient checks
     },
     filterText: {
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: '600',
-        color: COLORS.textLight,
+        color: COLORS.text,
     },
     activeFilterText: {
         color: COLORS.white,
     },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 10,
+        color: COLORS.textLight,
+    },
+    mapContainer: {
+        flex: 1,
+        marginTop: 10,
+        overflow: 'hidden',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+    },
     listContent: {
         padding: 20,
-        paddingTop: 5,
+        paddingTop: 10,
+        paddingBottom: 100,
     },
     card: {
-        backgroundColor: COLORS.white,
-        borderRadius: 15,
-        marginBottom: 15,
+        height: 200,
+        borderRadius: 20,
+        marginBottom: 16,
+        backgroundColor: COLORS.surface,
         overflow: 'hidden',
-        flexDirection: 'row',
-        height: 140, // Fixed height for consistency
+        position: 'relative',
     },
     cardImage: {
-        width: 120,
+        width: '100%',
         height: '100%',
-        backgroundColor: '#eee',
     },
-    cardContent: {
-        flex: 1,
-        padding: 12,
+    cardGradientOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+    },
+    cardContentOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        padding: 16,
         justifyContent: 'space-between',
     },
-    cardHeader: {
+    cardTopRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'flex-start',
+        alignItems: 'center',
     },
     statusBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 4,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 12,
     },
     statusText: {
         color: COLORS.white,
         fontSize: 10,
-        fontWeight: 'bold',
+        fontWeight: '800',
+        textTransform: 'uppercase',
     },
-    dateText: {
-        fontSize: 12,
-        color: COLORS.textLight,
-    },
-    title: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: COLORS.text,
-        marginTop: 5,
-        marginBottom: 2,
-    },
-    address: {
-        fontSize: 12,
-        color: COLORS.textLight,
-        marginBottom: 8,
-    },
-    actionRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    categoryBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    categoryText: {
+    dateTextOverlay: {
+        color: 'rgba(255,255,255,0.8)',
         fontSize: 12,
         fontWeight: '600',
     },
-    actionButton: {
-        backgroundColor: COLORS.primary,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    actionButtonText: {
+    titleOverlay: {
         color: COLORS.white,
-        fontSize: 12,
+        fontSize: 18,
         fontWeight: 'bold',
+        marginBottom: 4,
+        textShadowColor: 'rgba(0,0,0,0.5)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+    },
+    addressOverlay: {
+        color: 'rgba(255,255,255,0.9)',
+        fontSize: 13,
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(0,0,0,0.6)',
         justifyContent: 'flex-end',
     },
+    detailContainer: {
+        backgroundColor: COLORS.surface,
+        borderTopLeftRadius: 30,
+        borderTopRightRadius: 30,
+        height: '90%',
+        paddingBottom: 30,
+    },
+    detailHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 24,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f0f0f0',
+    },
+    detailTitle: {
+        flex: 1,
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: COLORS.text,
+    },
+    closeButton: {
+        padding: 4,
+    },
+    detailImage: {
+        width: '100%',
+        height: 250,
+    },
+    detailBody: {
+        padding: 24,
+    },
+    statusBadgeLarge: {
+        alignSelf: 'flex-start',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        marginBottom: 20,
+    },
+    statusTextLarge: {
+        color: COLORS.white,
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+        fontSize: 12,
+    },
+    infoGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 16,
+        marginBottom: 24,
+    },
+    infoItem: {
+        width: '47%',
+        backgroundColor: '#f8f9fa',
+        padding: 12,
+        borderRadius: 12,
+    },
+    infoLabel: {
+        fontSize: 12,
+        color: COLORS.textLight,
+        marginBottom: 4,
+    },
+    infoValue: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: COLORS.text,
+    },
+    sectionHeader: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: COLORS.text,
+        marginBottom: 8,
+        marginTop: 8,
+    },
+    descriptionText: {
+        color: COLORS.textLight,
+        lineHeight: 22,
+        fontSize: 15,
+        marginBottom: 16,
+    },
+    addressText: {
+        color: COLORS.text,
+        fontSize: 15,
+        marginBottom: 20,
+    },
+    assignedBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(42, 128, 185, 0.1)',
+        padding: 12,
+        borderRadius: 12,
+        gap: 10,
+    },
+    assignedText: {
+        color: COLORS.primary,
+        fontWeight: '600',
+    },
+    detailActions: {
+        padding: 24,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: 10,
+        borderTopWidth: 1,
+        borderTopColor: '#f0f0f0',
+    },
+    actionBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 14,
+        borderRadius: 16,
+        gap: 8,
+    },
+    primaryBtn: {
+        backgroundColor: COLORS.primary,
+        flex: 1.5,
+    },
+    assignBtn: {
+        backgroundColor: COLORS.secondary,
+    },
+    deleteBtn: {
+        backgroundColor: COLORS.danger,
+    },
+    btnText: {
+        color: COLORS.white,
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
     modalContent: {
-        backgroundColor: COLORS.white,
+        backgroundColor: COLORS.surface,
         borderTopLeftRadius: 30,
         borderTopRightRadius: 30,
         padding: 24,
+        paddingBottom: 40,
         maxHeight: '80%',
     },
     modalHeader: {
@@ -634,15 +805,30 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: COLORS.textLight,
         marginBottom: 20,
-        fontStyle: 'italic',
     },
     staffItem: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: 15,
+        paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+        borderBottomColor: '#f0f0f0',
+    },
+    staffAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: COLORS.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    staffInitials: {
+        color: COLORS.white,
+        fontWeight: 'bold',
+        fontSize: 16,
+    },
+    staffInfo: {
+        flex: 1,
     },
     staffName: {
         fontSize: 16,
@@ -650,91 +836,13 @@ const styles = StyleSheet.create({
         color: COLORS.text,
     },
     staffPhone: {
-        fontSize: 14,
+        fontSize: 13,
         color: COLORS.textLight,
     },
     emptyText: {
         textAlign: 'center',
         color: COLORS.textLight,
         marginTop: 20,
-    },
-    detailContainer: {
-        backgroundColor: COLORS.white,
-        borderTopLeftRadius: 30,
-        borderTopRightRadius: 30,
-        padding: 24,
-        maxHeight: '90%',
-    },
-    detailHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    detailTitle: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        color: COLORS.text,
-        flex: 1,
-    },
-    detailImage: {
-        width: '100%',
-        height: 250,
-        borderRadius: 15,
-        marginBottom: 20,
-    },
-    detailInfo: {
-        marginBottom: 20,
-    },
-    detailRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-        gap: 10,
-    },
-    detailLabel: {
-        fontSize: 14,
-        color: COLORS.textLight,
-        width: 100,
-    },
-    detailValue: {
-        fontSize: 14,
-        color: COLORS.text,
-        fontWeight: '600',
-        flex: 1,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#eee',
-        marginVertical: 15,
-    },
-    sectionLabel: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: COLORS.text,
-        marginBottom: 8,
-    },
-    descriptionText: {
-        fontSize: 15,
-        lineHeight: 22,
-        color: COLORS.text,
-    },
-    detailActions: {
-        flexDirection: 'row',
-        gap: 12,
-        marginTop: 10,
-    },
-    modalButton: {
-        flex: 1,
-        backgroundColor: COLORS.primary,
-        padding: 15,
-        borderRadius: 12,
-        alignItems: 'center',
-    },
-    modalButtonText: {
-        color: COLORS.white,
-        fontWeight: 'bold',
-        fontSize: 16,
     },
 });
 

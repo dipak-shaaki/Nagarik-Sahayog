@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Department, Report
+from .models import Department, Report, Notification
 
 User = get_user_model()
 
@@ -16,7 +16,7 @@ class UserSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ('id', 'username', 'phone', 'role', 'department', 'department_name', 'office_latitude', 'office_longitude', 'first_name', 'address', 'id_type', 'id_number')
+        fields = ('id', 'username', 'phone', 'role', 'department', 'department_name', 'office_latitude', 'office_longitude', 'first_name', 'address', 'id_type', 'id_number', 'profile_photo')
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -65,8 +65,25 @@ class ReportSerializer(serializers.ModelSerializer):
     official_name = serializers.ReadOnlyField(source='assigned_official.username')
     office_latitude = serializers.ReadOnlyField(source='category.office_latitude')
     office_longitude = serializers.ReadOnlyField(source='category.office_longitude')
+    like_count = serializers.SerializerMethodField()
+    is_liked = serializers.SerializerMethodField()
 
     class Meta:
         model = Report
         fields = '__all__'
         read_only_fields = ('citizen', 'status', 'assigned_official')
+
+    def get_like_count(self, obj):
+        return obj.likes.count()
+
+    def get_is_liked(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.likes.filter(id=request.user.id).exists()
+        return False
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = '__all__'
+

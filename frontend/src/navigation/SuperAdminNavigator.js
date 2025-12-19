@@ -5,6 +5,8 @@ import MapScreen from '../screens/MapScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import SuperAdminDashboardScreen from '../screens/SuperAdminDashboardScreen';
 
+import AlertsScreen from '../screens/AlertsScreen';
+
 const Stack = createStackNavigator();
 
 const SuperAdminNavigator = () => {
@@ -36,6 +38,11 @@ const SuperAdminNavigator = () => {
                 name="Profile"
                 component={ProfileScreen}
                 options={{ title: 'My Profile' }}
+            />
+            <Stack.Screen
+                name="Alerts"
+                component={AlertsScreen}
+                options={{ title: 'Notifications' }}
             />
         </Stack.Navigator>
     );
