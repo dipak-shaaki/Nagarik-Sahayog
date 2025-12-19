@@ -2,7 +2,9 @@ import { createStackNavigator } from '@react-navigation/stack';
 import ReportScreen from '../screens/ReportScreen';
 import TabNavigator from './TabNavigator';
 
+// Metro bundler will automatically use .web.js on web and regular file on native
 import EmergencyTrackingScreen from '../screens/EmergencyTrackingScreen';
+
 import MapScreen from '../screens/MapScreen';
 import ServiceDetailScreen from '../screens/ServiceDetailScreen';
 

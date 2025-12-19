@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 const AuthContext = createContext();
 
 // Use your computer's IP address if testing on a real device
-const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
+export const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.10.254.243:8000/api';
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);

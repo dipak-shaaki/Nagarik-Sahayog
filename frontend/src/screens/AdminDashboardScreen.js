@@ -140,6 +140,16 @@ const AdminDashboardScreen = ({ navigation }) => {
         }
     };
 
+    const getPriorityColor = (level) => {
+        switch (level) {
+            case 'CRITICAL': return '#DC2626'; // Red
+            case 'HIGH': return '#EA580C'; // Orange
+            case 'MEDIUM': return '#CA8A04'; // Yellow
+            case 'LOW': return '#16A34A'; // Green
+            default: return COLORS.textLight;
+        }
+    };
+
     const filteredReports = filter === 'ALL'
         ? reports
         : reports.filter(r => r.status === filter);
@@ -153,8 +163,16 @@ const AdminDashboardScreen = ({ navigation }) => {
                 <Image source={{ uri: item.image || 'https://placehold.co/150' }} style={styles.cardImage} />
                 <View style={styles.cardContent}>
                     <View style={styles.cardHeader}>
-                        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-                            <Text style={styles.statusText}>{item.status}</Text>
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+                                <Text style={styles.statusText}>{item.status}</Text>
+                            </View>
+                            {item.priority_level && (
+                                <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority_level) }]}>
+                                    <Ionicons name="flame" size={10} color={COLORS.white} />
+                                    <Text style={styles.priorityText}>{item.priority_level}</Text>
+                                </View>
+                            )}
                         </View>
                         <Text style={styles.dateText}>{new Date(item.created_at).toLocaleDateString()}</Text>
                     </View>
@@ -350,6 +368,18 @@ const AdminDashboardScreen = ({ navigation }) => {
 
                                     <Text style={styles.sectionLabel}>Description</Text>
                                     <Text style={styles.descriptionText}>{selectedReport?.description}</Text>
+
+                                    {selectedReport?.ai_reasoning && (
+                                        <>
+                                            <View style={styles.divider} />
+                                            <Text style={styles.sectionLabel}>AI Priority Analysis</Text>
+                                            <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(selectedReport.priority_level), alignSelf: 'flex-start', marginBottom: 10 }]}>
+                                                <Ionicons name="flame" size={14} color={COLORS.white} />
+                                                <Text style={[styles.priorityText, { fontSize: 14 }]}>{selectedReport.priority_level} ({selectedReport.priority_score}/100)</Text>
+                                            </View>
+                                            <Text style={styles.aiReasoningText}>{selectedReport.ai_reasoning}</Text>
+                                        </>
+                                    )}
                                 </View>
                             </ScrollView>
 
@@ -606,6 +636,25 @@ const styles = StyleSheet.create({
         color: COLORS.white,
         fontSize: 12,
         fontWeight: 'bold',
+    },
+    priorityBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 4,
+        gap: 3,
+    },
+    priorityText: {
+        color: COLORS.white,
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+    aiReasoningText: {
+        fontSize: 14,
+        lineHeight: 20,
+        color: COLORS.textLight,
+        fontStyle: 'italic',
     },
     modalOverlay: {
         flex: 1,
