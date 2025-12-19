@@ -386,7 +386,14 @@ class SimulateMovementView(APIView):
             
             # Check for arrival
             dist = math.sqrt((emergency.latitude - official_loc.latitude)**2 + (emergency.longitude - official_loc.longitude)**2)
-            if dist < 0.00015: # Approx 15-20 meters
+            
+            # Tightened Logic:
+            # 1. Very close (< 40m): Arrived regardless of route step (approx 0.0004 deg)
+            # 2. End of Route AND Close (< 150m): Handles OSRM snapping gap (approx 0.0015 deg)
+            
+            is_at_end_of_route = emergency.route_path and emergency.current_route_step >= len(emergency.route_path) - 1
+            
+            if (dist < 0.0004) or (is_at_end_of_route and dist < 0.0015):
                 emergency.status = 'ARRIVED'
                 emergency.save()
                 # Free up the official for new requests
