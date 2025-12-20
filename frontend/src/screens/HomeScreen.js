@@ -33,16 +33,7 @@ const HomeScreen = ({ navigation }) => {
     };
 
     const handleEmergency = (type) => {
-        // Find the fire category ID if it's fire
-        const fireDept = departments.find(d => d.name.toLowerCase() === 'fire');
-
-        navigation.navigate('CreateReport', {
-            prefill: {
-                title: `${type} Emergency`,
-                description: `Emergency ${type} service requested.`,
-                category: fireDept?.id
-            }
-        });
+        navigation.navigate('EmergencyTracking', { serviceName: type });
     };
 
     const handleUtility = (type) => {

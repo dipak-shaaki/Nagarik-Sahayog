@@ -75,3 +75,49 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"Notification for {self.recipient}: {self.title}"
+
+class EmergencyRequest(models.Model):
+    SERVICE_CHOICES = (
+        ('AMBULANCE', 'Ambulance'),
+        ('FIRE', 'Fire Brigade'),
+        ('POLICE', 'Police'),
+    )
+    STATUS_CHOICES = (
+        ('PENDING', 'Pending'),
+        ('DISPATCHED', 'Dispatched'),
+        ('EN_ROUTE', 'En Route'),
+        ('ARRIVED', 'Arrived'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
+    )
+
+    citizen = models.ForeignKey(User, on_delete=models.CASCADE, related_name='emergency_requests')
+    service_type = models.CharField(max_length=20, choices=SERVICE_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    
+    # Citizen location
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    address = models.CharField(max_length=255, blank=True)
+    
+    assigned_official = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_emergencies')
+    
+    # Route tracking for realistic simulation
+    route_path = models.JSONField(null=True, blank=True)  # Stores the full route coordinates
+    current_route_step = models.IntegerField(default=0)  # Current position in the route
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.service_type} - {self.status} ({self.citizen.phone})"
+
+class FieldOfficialLocation(models.Model):
+    official = models.OneToOneField(User, on_delete=models.CASCADE, related_name='current_location')
+    latitude = models.FloatField(default=27.7172)
+    longitude = models.FloatField(default=85.3240)
+    is_available = models.BooleanField(default=True)
+    last_updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.official.phone} - ({self.latitude}, {self.longitude})"
