@@ -130,45 +130,45 @@ const HomeScreen = ({ navigation }) => {
                 </View>
 
                 <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Services</Text>
+                    <Text style={styles.sectionTitle}>Report Issues</Text>
                 </View>
 
                 <View style={styles.utilityGrid}>
                     <UtilityButton
-                        title="Water"
+                        title="Road & Transport"
+                        icon={<MaterialIcons name="directions-car" size={24} color="#E67E22" />}
+                        color="#E67E22"
+                        onPress={() => navigation.navigate('Report', { prefill: { category: 'Road and Transport' } })}
+                    />
+                    <UtilityButton
+                        title="Waste & Sanitation"
+                        icon={<MaterialCommunityIcons name="delete" size={24} color="#2ECC71" />}
+                        color="#2ECC71"
+                        onPress={() => navigation.navigate('Report', { prefill: { category: 'Waste and Sanitation' } })}
+                    />
+                    <UtilityButton
+                        title="Water & Drainage"
                         icon={<Ionicons name="water" size={24} color="#3498DB" />}
                         color="#3498DB"
-                        onPress={() => handleUtility('Water Service')}
+                        onPress={() => navigation.navigate('Report', { prefill: { category: 'Water and Drainage' } })}
                     />
                     <UtilityButton
-                        title="Sanitation"
-                        icon={<MaterialCommunityIcons name="truck" size={24} color="#8E44AD" />}
-                        color="#8E44AD"
-                        onPress={() => handleUtility('Safety Tank Clean')}
+                        title="Other Issues"
+                        icon={<MaterialIcons name="report-problem" size={24} color="#95A5A6" />}
+                        color="#95A5A6"
+                        onPress={() => navigation.navigate('Report', { prefill: { category: 'Other' } })}
                     />
                     <UtilityButton
-                        title="Mechanic"
-                        icon={<MaterialIcons name="car-repair" size={24} color="#E67E22" />}
-                        color="#E67E22"
-                        onPress={() => handleUtility('Mechanic')}
+                        title="View My Reports"
+                        icon={<Ionicons name="list" size={24} color="#9B59B6" />}
+                        color="#9B59B6"
+                        onPress={() => navigation.navigate('Dashboard')}
                     />
                     <UtilityButton
-                        title="Blood Bank"
-                        icon={<FontAwesome5 name="hand-holding-heart" size={20} color="#C0392B" />}
-                        color="#C0392B"
-                        onPress={() => handleUtility('Blood Donation')}
-                    />
-                    <UtilityButton
-                        title="Medicine"
-                        icon={<MaterialCommunityIcons name="pill" size={24} color="#27AE60" />}
-                        color="#27AE60"
-                        onPress={() => handleUtility('Medicine Service')}
-                    />
-                    <UtilityButton
-                        title="Groceries"
-                        icon={<MaterialCommunityIcons name="cart" size={24} color="#2ECC71" />}
-                        color="#2ECC71"
-                        onPress={() => handleUtility('Groceries')}
+                        title="Community Feed"
+                        icon={<MaterialCommunityIcons name="account-group" size={24} color="#1ABC9C" />}
+                        color="#1ABC9C"
+                        onPress={() => navigation.navigate('CommunityFeed')}
                     />
                 </View>
 

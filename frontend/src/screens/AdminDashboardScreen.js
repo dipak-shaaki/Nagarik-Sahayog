@@ -1,22 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useState, useCallback } from 'react';
+import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import ScreenWrapper from '../components/ScreenWrapper';
 import { COLORS, SHADOWS } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
-
 import { useAuth } from '../context/AuthContext';
 import { API_URL } from '../config/api';
 
-
-
-
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
-import MapRenderer from '../components/MapRenderer'; // Assuming this import was missing in snippet but present in file
+import MapRenderer from '../components/MapRenderer';
 
 const AdminDashboardScreen = ({ navigation }) => {
     const { logout, user } = useAuth();
@@ -111,15 +105,12 @@ const AdminDashboardScreen = ({ navigation }) => {
                     return;
                 }
                 const token = await AsyncStorage.getItem('userToken');
-                console.log('Attempting to delete report:', selectedReport.id);
-
                 const response = await fetch(`${API_URL}/reports/${selectedReport.id}/`, {
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
                 if (response.ok) {
-                    console.log('Delete successful');
                     if (Platform.OS === 'web') {
                         alert('Report deleted successfully');
                     } else {
@@ -129,21 +120,11 @@ const AdminDashboardScreen = ({ navigation }) => {
                     fetchReports();
                 } else {
                     const errorData = await response.json().catch(() => ({}));
-                    console.error('Delete failed:', response.status, errorData);
                     const errorMsg = errorData.error || `Failed to delete report: ${response.status}`;
-                    if (Platform.OS === 'web') {
-                        alert(errorMsg);
-                    } else {
-                        Alert.alert('Error', errorMsg);
-                    }
+                    Alert.alert('Error', errorMsg);
                 }
             } catch (error) {
-                console.error('Delete connection error:', error);
-                if (Platform.OS === 'web') {
-                    alert('Connection error');
-                } else {
-                    Alert.alert('Error', 'Connection error');
-                }
+                Alert.alert('Error', 'Connection error');
             }
         };
 
@@ -174,6 +155,16 @@ const AdminDashboardScreen = ({ navigation }) => {
         }
     };
 
+    const getPriorityColor = (level) => {
+        switch (level) {
+            case 'CRITICAL': return '#DC2626'; // Red
+            case 'HIGH': return '#EA580C'; // Orange
+            case 'MEDIUM': return '#CA8A04'; // Yellow
+            case 'LOW': return '#16A34A'; // Green
+            default: return COLORS.textLight;
+        }
+    };
+
     const filteredReports = filter === 'ALL'
         ? reports
         : reports.filter(r => r.status === filter);
@@ -185,27 +176,35 @@ const AdminDashboardScreen = ({ navigation }) => {
                     setSelectedReport(item);
                     setShowDetailModal(true);
                 }}
-                activeOpacity={0.9}
+                activeOpacity={0.7}
             >
-                <View style={[styles.card, SHADOWS.medium]}>
+                <View style={[styles.card, SHADOWS.small, { borderLeftColor: getStatusColor(item.status) }]}>
                     <Image source={{ uri: item.image || 'https://placehold.co/150' }} style={styles.cardImage} />
-                    <LinearGradient
-                        colors={['transparent', 'rgba(0,0,0,0.8)']}
-                        style={styles.cardGradientOverlay}
-                    />
-                    <View style={styles.cardContentOverlay}>
-                        <View style={styles.cardTopRow}>
-                            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-                                <Text style={styles.statusText}>{item.status}</Text>
+
+                    <View style={styles.cardContent}>
+                        <View style={styles.cardHeaderRow}>
+                            <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
+                            <View style={{ flexDirection: 'row', gap: 6 }}>
+                                <View style={[styles.statusPill, { backgroundColor: getStatusColor(item.status) + '20' }]}>
+                                    <Text style={[styles.statusPillText, { color: getStatusColor(item.status) }]}>{item.status}</Text>
+                                </View>
+                                {item.priority_level && (
+                                    <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority_level) }]}>
+                                        <Ionicons name="flame" size={10} color={COLORS.white} />
+                                        <Text style={styles.priorityText}>{item.priority_level}</Text>
+                                    </View>
+                                )}
                             </View>
-                            <Text style={styles.dateTextOverlay}>{new Date(item.created_at).toLocaleDateString()}</Text>
                         </View>
 
-                        <View>
-                            <Text style={styles.titleOverlay}>{item.title}</Text>
-                            <Text style={styles.addressOverlay} numberOfLines={1}>
-                                <Ionicons name="location" size={12} color={COLORS.white} /> {item.location_address || 'No address'}
-                            </Text>
+                        <View style={styles.cardRow}>
+                            <Ionicons name="location-outline" size={14} color={COLORS.textLight} />
+                            <Text style={styles.cardAddress} numberOfLines={1}>{item.location_address || 'No address'}</Text>
+                        </View>
+
+                        <View style={styles.cardRow}>
+                            <Ionicons name="time-outline" size={14} color={COLORS.textLight} />
+                            <Text style={styles.cardDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
                         </View>
                     </View>
                 </View>
@@ -226,10 +225,10 @@ const AdminDashboardScreen = ({ navigation }) => {
                         < View style={styles.headerContent}>
                             <View>
                                 <Text style={styles.headerTitle}>
-                                    {user?.role === 'SUPER_ADMIN' ? 'Admin Control' : 'Department'}
+                                    {user?.role === 'SUPER_ADMIN' ? 'Super Admin' : `${user?.department_name || 'Department'} Admin`}
                                 </Text>
                                 <Text style={styles.headerSubtitle}>
-                                    {user?.role === 'SUPER_ADMIN' ? 'Super Admin Dashboard' : 'Manage your department issues'}
+                                    {user?.role === 'SUPER_ADMIN' ? 'System Control Panel' : `Managing ${user?.department_name || 'Department'} Operations`}
                                 </Text>
                             </View>
 
@@ -388,6 +387,17 @@ const AdminDashboardScreen = ({ navigation }) => {
                                             <Ionicons name="shield-checkmark" size={20} color={COLORS.primary} />
                                             <Text style={styles.assignedText}>Assigned: {selectedReport.official_name}</Text>
                                         </View>
+                                    )}
+
+                                    {selectedReport?.ai_reasoning && (
+                                        <>
+                                            <Text style={styles.sectionHeader}>AI Priority Analysis</Text>
+                                            <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(selectedReport.priority_level), alignSelf: 'flex-start', marginBottom: 10, paddingHorizontal: 12, paddingVertical: 6 }]}>
+                                                <Ionicons name="flame" size={14} color={COLORS.white} />
+                                                <Text style={[styles.priorityText, { fontSize: 14 }]}>{selectedReport.priority_level} ({selectedReport.priority_score}/100)</Text>
+                                            </View>
+                                            <Text style={styles.aiReasoningText}>{selectedReport.ai_reasoning}</Text>
+                                        </>
                                     )}
                                 </View>
                             </ScrollView>
@@ -556,11 +566,14 @@ const styles = StyleSheet.create({
     },
     statCard: {
         flex: 1,
-        backgroundColor: 'rgba(255,255,255,0.95)',
-        borderRadius: 16,
-        padding: 12,
+        backgroundColor: COLORS.white,
+        borderRadius: 12,
+        padding: 15,
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#EEE',
         ...SHADOWS.small,
+        elevation: 2,
     },
     statCount: {
         fontSize: 20,
@@ -622,66 +635,65 @@ const styles = StyleSheet.create({
         paddingBottom: 100,
     },
     card: {
-        height: 200,
-        borderRadius: 20,
-        marginBottom: 16,
-        backgroundColor: COLORS.surface,
+        borderRadius: 12,
+        marginBottom: 12,
+        backgroundColor: COLORS.white,
+        borderLeftWidth: 4,
+        borderLeftColor: COLORS.primary,
         overflow: 'hidden',
-        position: 'relative',
+        // removed background image gradient overlay logic to make it cleaner list style
+        flexDirection: 'row',
+        padding: 15,
+        alignItems: 'center',
     },
     cardImage: {
-        width: '100%',
-        height: '100%',
+        width: 80,
+        height: 80,
+        borderRadius: 8,
+        marginRight: 15,
     },
-    cardGradientOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+    cardContent: {
+        flex: 1,
+        justifyContent: 'center',
     },
-    cardContentOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        padding: 16,
-        justifyContent: 'space-between',
-    },
-    cardTopRow: {
+    cardHeaderRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        marginBottom: 6,
     },
-    statusBadge: {
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 12,
+    cardTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: COLORS.text,
+        flex: 1,
+        marginRight: 8,
     },
-    statusText: {
-        color: COLORS.white,
+    statusPill: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+    },
+    statusPillText: {
         fontSize: 10,
-        fontWeight: '800',
+        fontWeight: '700',
         textTransform: 'uppercase',
     },
-    dateTextOverlay: {
-        color: 'rgba(255,255,255,0.8)',
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    titleOverlay: {
-        color: COLORS.white,
-        fontSize: 18,
-        fontWeight: 'bold',
+    cardRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
         marginBottom: 4,
-        textShadowColor: 'rgba(0,0,0,0.5)',
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 3,
     },
-    addressOverlay: {
-        color: 'rgba(255,255,255,0.9)',
+    cardAddress: {
         fontSize: 13,
+        color: COLORS.textLight,
+        marginLeft: 4,
+        flex: 1,
+    },
+    cardDate: {
+        fontSize: 12,
+        color: COLORS.textLight,
+        marginLeft: 4,
     },
     modalOverlay: {
         flex: 1,
@@ -876,6 +888,26 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         color: COLORS.textLight,
         marginTop: 20,
+    },
+    priorityBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 4,
+        gap: 3,
+    },
+    priorityText: {
+        color: COLORS.white,
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+    aiReasoningText: {
+        fontSize: 14,
+        lineHeight: 20,
+        color: COLORS.textLight,
+        fontStyle: 'italic',
+        marginTop: 5,
     },
 });
 

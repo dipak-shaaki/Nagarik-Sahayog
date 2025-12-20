@@ -221,6 +221,19 @@ class ReportViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         report = serializer.save(citizen=self.request.user)
         
+        # Calculate AI priority
+        try:
+            from api.ai_priority import calculate_priority_with_ai
+            score, level, reasoning = calculate_priority_with_ai(report)
+            report.priority_score = score
+            report.priority_level = level
+            report.ai_reasoning = reasoning
+            report.save()
+            print(f"AI Priority assigned: {level} ({score}) - {reasoning[:50]}...")
+        except Exception as e:
+            print(f"AI Priority calculation failed: {e}")
+            # Continue without priority if AI fails
+        
         # Notify the citizen that report is received
         Notification.objects.create(
             recipient=self.request.user,

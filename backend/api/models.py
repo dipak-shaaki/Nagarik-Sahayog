@@ -56,6 +56,17 @@ class Report(models.Model):
     rejection_reason = models.TextField(null=True, blank=True)
     likes = models.ManyToManyField(User, related_name='liked_reports', blank=True)
     
+    # AI Priority Fields
+    PRIORITY_CHOICES = (
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('CRITICAL', 'Critical'),
+    )
+    priority_level = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM')
+    priority_score = models.IntegerField(default=50)  # 0 to 100
+    ai_reasoning = models.TextField(blank=True, null=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

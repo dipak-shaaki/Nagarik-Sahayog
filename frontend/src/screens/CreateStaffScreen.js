@@ -9,7 +9,7 @@ import { COLORS, SHADOWS } from '../constants/theme';
 import { API_URL } from '../config/api';
 
 
-const CreateStaffScreen = ({ navigation }) => {
+const CreateStaffScreen = ({ navigation, route }) => {
     const [formData, setFormData] = useState({
         phone: '',
         password: '',
@@ -20,6 +20,15 @@ const CreateStaffScreen = ({ navigation }) => {
     const [departments, setDepartments] = useState([]);
     const [loading, setLoading] = useState(false);
     const [fetchingDepts, setFetchingDepts] = useState(true);
+
+    const [availableRoles, setAvailableRoles] = useState(['DEPT_ADMIN', 'FIELD_OFFICIAL']);
+
+    useEffect(() => {
+        if (route.params?.roleType) {
+            setFormData(prev => ({ ...prev, role: route.params.roleType }));
+            setAvailableRoles([route.params.roleType]);
+        }
+    }, [route.params]);
 
     useEffect(() => {
         fetchDepartments();
@@ -108,7 +117,7 @@ const CreateStaffScreen = ({ navigation }) => {
 
                     <Text style={styles.label}>Select Role</Text>
                     <View style={styles.roleRow}>
-                        {['DEPT_ADMIN', 'FIELD_OFFICIAL'].map((r) => (
+                        {availableRoles.map((r) => (
                             <TouchableOpacity
                                 key={r}
                                 style={[styles.roleBtn, formData.role === r && styles.activeRoleBtn]}

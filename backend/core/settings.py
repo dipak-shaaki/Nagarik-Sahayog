@@ -108,3 +108,8 @@ SIMPLE_JWT = {
 CORS_ALLOW_ALL_ORIGINS = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Gemini AI Configuration
+import os
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'AIzaSyAGiqkOHE6oW5t9kt0s5_1j75ccQwnpzRU')  # Set this in environment or add your key here
+
