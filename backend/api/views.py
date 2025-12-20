@@ -70,7 +70,26 @@ class NotificationViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        return Notification.objects.filter(recipient=self.request.user)
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Get base queryset for user's notifications
+        queryset = Notification.objects.filter(recipient=self.request.user)
+        
+        # Filter out notifications for reports that have been resolved for more than 12 hours
+        twelve_hours_ago = timezone.now() - timedelta(hours=12)
+        
+        # Exclude notifications where:
+        # - The notification has a related report
+        # - The report status is RESOLVED
+        # - The report was updated (resolved) more than 12 hours ago
+        queryset = queryset.exclude(
+            report__isnull=False,
+            report__status='RESOLVED',
+            report__updated_at__lt=twelve_hours_ago
+        )
+        
+        return queryset
 
     @action(detail=False, methods=['get'])
     def unread_count(self, request):
@@ -108,6 +127,16 @@ class ReportViewSet(viewsets.ModelViewSet):
         else:
             # Citizens see their own reports
             return Report.objects.filter(citizen=user)
+
+    def retrieve(self, request, *args, **kwargs):
+        # Allow viewing any report details (for community feed)
+        # Use Report.objects.get() to bypass queryset filtering
+        try:
+            report = Report.objects.get(pk=kwargs.get('pk'))
+            serializer = self.get_serializer(report)
+            return Response(serializer.data)
+        except Report.DoesNotExist:
+            return Response({'error': 'Report not found'}, status=status.HTTP_404_NOT_FOUND)
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -159,7 +188,13 @@ class ReportViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def like(self, request, pk=None):
-        report = self.get_object()
+        # Use Report.objects.get() instead of self.get_object() to bypass queryset filtering
+        # This allows users to like any report, not just ones in their filtered queryset
+        try:
+            report = Report.objects.get(pk=pk)
+        except Report.DoesNotExist:
+            return Response({'error': 'Report not found'}, status=status.HTTP_404_NOT_FOUND)
+            
         user = request.user
         if report.likes.filter(id=user.id).exists():
             report.likes.remove(user)

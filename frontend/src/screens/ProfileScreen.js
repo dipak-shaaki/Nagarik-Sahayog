@@ -9,9 +9,10 @@ import ScreenWrapper from '../components/ScreenWrapper';
 import { COLORS, SHADOWS } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { API_URL, BASE_URL } from '../config/api';
 
-const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
-const BASE_URL = Platform.OS === 'web' ? 'http://localhost:8000' : 'http://10.0.2.2:8000';
+
+
 
 const ProfileScreen = ({ navigation }) => {
     const { logout, user, refreshUser } = useAuth();

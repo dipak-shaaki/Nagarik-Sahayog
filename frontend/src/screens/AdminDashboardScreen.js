@@ -9,8 +9,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
+import { API_URL } from '../config/api';
 
-const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
+
 
 
 import { useFocusEffect } from '@react-navigation/native';

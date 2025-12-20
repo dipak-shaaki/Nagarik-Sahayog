@@ -6,8 +6,8 @@ import { Dimensions, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, V
 import PlatformMapView from '../components/PlatformMapView';
 import ScreenWrapper from '../components/ScreenWrapper';
 import { COLORS, SHADOWS } from '../constants/theme';
+import { API_URL } from '../config/api';
 
-const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
 
 const { width, height } = Dimensions.get('window');
 const ASPECT_RATIO = width / height;

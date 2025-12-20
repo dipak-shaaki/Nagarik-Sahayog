@@ -1,11 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
+import { API_URL } from '../config/api';
 
 const AuthContext = createContext();
-
-// Use your computer's IP address if testing on a real device
-const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -44,13 +42,18 @@ export const AuthProvider = ({ children }) => {
     const login = async (phone, password) => {
         setIsLoading(true);
         try {
+            console.log('Attempting login with API_URL:', API_URL);
+            console.log('Login endpoint:', `${API_URL}/auth/login/`);
+
             const response = await fetch(`${API_URL}/auth/login/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phone, password }),
             });
 
+            console.log('Login response status:', response.status);
             const data = await response.json();
+            console.log('Login response data:', data);
 
             if (response.ok) {
                 await AsyncStorage.setItem('userToken', data.access);
@@ -65,7 +68,9 @@ export const AuthProvider = ({ children }) => {
                 return { success: false, message: data.detail || 'Login failed' };
             }
         } catch (e) {
-            return { success: false, message: 'Server unreachable' };
+            console.error('Login error:', e);
+            console.error('Error message:', e.message);
+            return { success: false, message: `Connection error: ${e.message}` };
         } finally {
             setIsLoading(false);
         }

@@ -6,10 +6,11 @@ import { Ionicons } from '@expo/vector-icons';
 
 import ScreenWrapper from '../components/ScreenWrapper';
 import { COLORS, SHADOWS } from '../constants/theme';
+import { API_URL } from '../config/api';
 import { useLanguage } from '../context/LanguageContext';
 import { useNotifications } from '../context/NotificationContext';
 
-const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
+
 
 const AlertsScreen = ({ navigation }) => {
     const { t } = useLanguage();
@@ -128,12 +129,6 @@ const AlertsScreen = ({ navigation }) => {
                     <Text style={[styles.cardTitle, !item.is_read && styles.unreadText]}>{item.title}</Text>
                     {!item.is_read && <View style={styles.activeDot} />}
                 </View>
-                <TouchableOpacity
-                    onPress={() => deleteNotification(item.id)}
-                    style={styles.deleteBtn}
-                >
-                    <Ionicons name="trash-outline" size={18} color={COLORS.textLight} />
-                </TouchableOpacity>
             </View>
             <Text style={styles.cardDesc}>{item.message}</Text>
             <Text style={styles.cardDate}>{new Date(item.created_at).toLocaleString()}</Text>

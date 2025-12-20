@@ -20,10 +20,9 @@ import ScreenWrapper from '../components/ScreenWrapper';
 import { COLORS, SHADOWS } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { API_URL, BASE_URL } from '../config/api';
 
 const { width } = Dimensions.get('window');
-const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
-const BASE_URL = Platform.OS === 'web' ? 'http://localhost:8000' : 'http://10.0.2.2:8000';
 
 const CommunityFeedScreen = ({ navigation }) => {
     const { user } = useAuth();
@@ -60,20 +59,43 @@ const CommunityFeedScreen = ({ navigation }) => {
     const handleLike = async (reportId) => {
         try {
             const token = await AsyncStorage.getItem('userToken');
+            console.log('Attempting to like/unlike report:', reportId);
+
             const response = await fetch(`${API_URL}/reports/${reportId}/like/`, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
             });
+
+            console.log('Like response status:', response.status);
             const data = await response.json();
+            console.log('Like response data:', data);
+
             if (response.ok) {
+                // Update the local state with the new like status and count
                 setReports(prev => prev.map(report =>
                     report.id === reportId
                         ? { ...report, is_liked: data.liked, like_count: data.like_count }
                         : report
                 ));
+                console.log('Updated report:', reportId, 'liked:', data.liked, 'count:', data.like_count);
+            } else {
+                console.error('Failed to like/unlike:', data);
+                if (Platform.OS === 'web') {
+                    alert('Failed to update upvote. Please try again.');
+                } else {
+                    Alert.alert('Error', 'Failed to update upvote. Please try again.');
+                }
             }
         } catch (error) {
             console.error('Like error:', error);
+            if (Platform.OS === 'web') {
+                alert('Connection error. Please check your internet connection.');
+            } else {
+                Alert.alert('Error', 'Connection error. Please check your internet connection.');
+            }
         }
     };
 
@@ -270,10 +292,11 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: COLORS.white,
-        marginHorizontal: 20,
+        marginHorizontal: 16,
         marginTop: -25,
         borderRadius: 15,
         padding: 12,
+        maxWidth: width - 32, // Prevent overflow
         ...SHADOWS.medium,
     },
     searchPlaceholderText: {
@@ -284,9 +307,10 @@ const styles = StyleSheet.create({
     reportCard: {
         backgroundColor: COLORS.white,
         borderRadius: 25,
-        marginHorizontal: 15,
+        marginHorizontal: 12,
         marginTop: 20,
         overflow: 'hidden',
+        maxWidth: width - 24, // Ensure card doesn't exceed screen width
     },
     cardHeader: {
         flexDirection: 'row',
@@ -372,12 +396,14 @@ const styles = StyleSheet.create({
     },
     cardContent: {
         padding: 15,
+        paddingHorizontal: 12, // Reduce horizontal padding on mobile
     },
     reportTitle: {
         fontSize: 20,
         fontWeight: '800',
         color: COLORS.text,
         marginBottom: 8,
+        flexWrap: 'wrap', // Allow title to wrap on small screens
     },
     reportDescription: {
         fontSize: 14,
@@ -391,6 +417,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#F1F3F5',
         padding: 10,
         borderRadius: 12,
+        maxWidth: '100%', // Prevent overflow
     },
     locationText: {
         fontSize: 13,
@@ -398,6 +425,7 @@ const styles = StyleSheet.create({
         marginLeft: 6,
         fontWeight: '500',
         flex: 1,
+        flexWrap: 'wrap', // Allow text to wrap
     },
     actionSection: {
         flexDirection: 'row',

@@ -10,8 +10,9 @@ import ScreenWrapper from '../components/ScreenWrapper';
 import { CATEGORIES } from '../constants/categories';
 import { COLORS } from '../constants/theme';
 import { useLanguage } from '../context/LanguageContext';
+import { API_URL, BASE_URL } from '../config/api';
 
-const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
+
 
 const ReportScreen = ({ navigation, route }) => {
     const { t } = useLanguage();

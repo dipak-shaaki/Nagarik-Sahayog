@@ -2,10 +2,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
+import { API_URL } from '../config/api';
 
 const NotificationContext = createContext();
-
-const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
 
 export const NotificationProvider = ({ children }) => {
     const { user } = useAuth();

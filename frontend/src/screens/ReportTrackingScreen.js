@@ -7,9 +7,10 @@ import ScreenWrapper from '../components/ScreenWrapper';
 import { COLORS, SHADOWS } from '../constants/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
+import { API_URL } from '../config/api';
 
 const { width } = Dimensions.get('window');
-const API_URL = Platform.OS === 'web' ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
+
 
 const ReportTrackingScreen = ({ navigation, route }) => {
     const { user } = useAuth();
@@ -347,6 +348,7 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: COLORS.background,
+        maxWidth: '100%', // Prevent horizontal overflow
     },
     loadingContainer: {
         flex: 1,
@@ -424,8 +426,9 @@ const styles = StyleSheet.create({
     card: {
         backgroundColor: COLORS.white,
         borderRadius: 20,
-        padding: 20,
+        padding: 15, // Reduced padding for mobile
         marginBottom: 20,
+        maxWidth: width - 24, // Prevent overflow
     },
     sectionTitle: {
         fontSize: 16,
@@ -539,9 +542,10 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: COLORS.white,
-        padding: 20,
+        padding: 15, // Reduced padding for mobile
         marginBottom: 20,
-        gap: 15,
+        gap: 12,
+        maxWidth: '100%', // Prevent overflow
     },
     statusIconBg: {
         width: 60,
@@ -560,6 +564,8 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: COLORS.textLight,
         lineHeight: 20,
+        flexWrap: 'wrap', // Allow text to wrap
+        flex: 1, // Take available space
     },
     pendingText: {
         color: COLORS.textLight,
@@ -569,6 +575,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: COLORS.text,
         marginBottom: 8,
+        flexWrap: 'wrap', // Allow text to wrap
     },
     actionRow: {
         flexDirection: 'row',
